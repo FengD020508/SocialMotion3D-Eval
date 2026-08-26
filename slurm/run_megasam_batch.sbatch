@@ -15,6 +15,24 @@ set -euo pipefail
 
 PROJECT_ROOT="/home/infres/zwang-24/LGM2Motion"
 PYTHON_BIN="/home/infres/zwang-24/ENTER/envs/lgm2motion/bin/python"
+MANAGED_JOB_TMP=0
+
+if [[ -z "${SLURM_TMPDIR:-}" ]]; then
+    export SLURM_TMPDIR="/tmp/zwang-24-sm3d-${SLURM_JOB_ID}"
+    MANAGED_JOB_TMP=1
+fi
+case "${SLURM_TMPDIR}" in
+    /tmp/zwang-24-sm3d-[0-9]*|/local/*|/scratch/*) ;;
+    *) echo "unsafe job-local temporary path: ${SLURM_TMPDIR}" >&2; exit 2 ;;
+esac
+mkdir -p "${SLURM_TMPDIR}"
+
+cleanup_job_tmp() {
+    if [[ "${MANAGED_JOB_TMP}" -eq 1 && "${SLURM_TMPDIR}" == "/tmp/zwang-24-sm3d-${SLURM_JOB_ID}" ]]; then
+        rm -rf -- "${SLURM_TMPDIR}"
+    fi
+}
+trap cleanup_job_tmp EXIT
 
 cd "${PROJECT_ROOT}"
 export CUDA_VISIBLE_DEVICES=0
