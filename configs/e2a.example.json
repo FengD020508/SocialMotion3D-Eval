@@ -1,0 +1,14 @@
+{
+  "clip_id": "example_clip",
+  "e3_report": "/absolute/path/to/results/e3_pilot/e3_report.json",
+  "output_dir": "/absolute/path/to/results/e2a_pilot",
+  "human_sources": {
+    "megasam": {"path": "/absolute/path/to/megasam/smpl_params.pt"},
+    "droid": {"path": "/absolute/path/to/droid/smpl_params.pt"}
+  },
+  "camera_sources": {
+    "droid": {"path": "/absolute/path/to/droid/target_camera_trajectory.npz", "frame_numbers_are_source": true},
+    "megasam": {"path": "/absolute/path/to/megasam/target_camera_trajectory.npz", "frame_numbers_are_source": true}
+  }
+}
+

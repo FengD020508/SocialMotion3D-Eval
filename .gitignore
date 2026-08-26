@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Cluster-local inputs, outputs, caches, and audit trails.
+/data_private/
+/ops_private/
+/results/
+/cache/
+/_inspection/
+/configs/private_*.json
+

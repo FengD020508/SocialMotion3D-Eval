@@ -1,0 +1,25 @@
+{
+  "output_dir": "/absolute/path/to/results/e3_pilot",
+  "parameters": {
+    "calibration_fraction": 0.4,
+    "smooth_window_frames": 5,
+    "jump_mad_factor": 12.0,
+    "orthogonality_tolerance": 0.1,
+    "determinant_tolerance": 0.05,
+    "wrde_windows_seconds": [1, 2, 3],
+    "min_target_distance_m": 0.5
+  },
+  "clips": [
+    {
+      "clip_id": "example_clip",
+      "fps": 30.0,
+      "obd_xml": "/absolute/path/to/source_video_obd.xml",
+      "source_frame_offset": 1000,
+      "cameras": {
+        "droid": {"path": "/absolute/path/to/droid/camera_trajectory.npz"},
+        "megasam": {"path": "/absolute/path/to/megasam/camera_trajectory.npz"}
+      }
+    }
+  ]
+}
+
