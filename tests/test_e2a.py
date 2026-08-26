@@ -82,10 +82,11 @@ class E2aTests(unittest.TestCase):
             self.assertEqual(set(report["human_sources"]), {"droid", "megasam"})
             for human in report["human_sources"].values():
                 self.assertEqual(set(human["conditions"]), {"no_ego", "droid", "megasam"})
-                self.assertAlmostEqual(human["conditions"]["droid"]["path_length_m"], 4.0, places=5)
+                self.assertAlmostEqual(
+                    human["conditions"]["droid"]["path_length_on_common_valid_intervals_m"], 4.0, places=5
+                )
                 self.assertTrue((root / "out" / "e2a_report.json").is_file())
 
 
 if __name__ == "__main__":
     unittest.main()
-

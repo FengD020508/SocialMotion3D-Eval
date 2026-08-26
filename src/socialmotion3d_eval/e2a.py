@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from .io import load_camera_trajectory, load_json, save_json
+from .metrics import robust_interval_validity
 
 
 def _to_numpy(value: Any) -> np.ndarray:
@@ -42,19 +43,31 @@ def _align_camera(camera: dict[str, Any], source_frames: np.ndarray) -> tuple[np
     return camera["rotation"][indices], camera["camera_center"][indices], camera["timestamps"][indices]
 
 
-def _trajectory_metrics(position: np.ndarray, timestamps: np.ndarray) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
+def _trajectory_series(position: np.ndarray, timestamps: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     dt = np.diff(timestamps)
     step = np.linalg.norm(np.diff(position, axis=0), axis=1)
     speed = np.divide(step, dt, out=np.full_like(step, np.nan), where=np.isfinite(dt) & (dt > 0))
-    cumulative = np.concatenate(([0.0], np.cumsum(np.where(np.isfinite(step), step, 0.0))))
-    finite_speed = speed[np.isfinite(speed)]
+    return dt, step, speed
+
+
+def _trajectory_metrics(
+    position: np.ndarray,
+    step: np.ndarray,
+    speed: np.ndarray,
+    common_valid: np.ndarray,
+) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
+    valid_speed = speed[common_valid]
+    cumulative = np.concatenate(([0.0], np.cumsum(np.where(common_valid, step, 0.0))))
+    plot_speed = np.where(common_valid, speed, np.nan)
     metrics = {
-        "net_displacement_m": float(np.linalg.norm(position[-1] - position[0])),
-        "path_length_m": float(np.sum(step)),
-        "median_root_speed_mps": float(np.median(finite_speed)) if len(finite_speed) else float("nan"),
-        "p95_root_speed_mps": float(np.percentile(finite_speed, 95)) if len(finite_speed) else float("nan"),
+        "endpoint_displacement_m": float(np.linalg.norm(position[-1] - position[0])),
+        "path_length_on_common_valid_intervals_m": float(np.sum(step[common_valid])),
+        "raw_path_length_m": float(np.sum(step[np.isfinite(step)])),
+        "median_root_speed_mps": float(np.median(valid_speed)),
+        "p95_root_speed_mps": float(np.percentile(valid_speed, 95)),
+        "common_valid_interval_ratio": float(np.mean(common_valid)),
     }
-    return metrics, speed, cumulative
+    return metrics, plot_speed, cumulative
 
 
 def _plot_invariant(path: Path, title: str, trajectories: dict[str, dict[str, Any]]) -> None:
@@ -111,6 +124,9 @@ def run_e2a(config_path: str | Path) -> dict[str, Any]:
     output_dir = Path(config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     clip_id = config["clip_id"]
+    parameters = config.get("parameters", {})
+    max_root_speed_mps = float(parameters.get("max_root_speed_mps", 8.0))
+    jump_mad_factor = float(parameters.get("jump_mad_factor", 12.0))
     e3_report = load_json(config["e3_report"])
     clip_report = next(item for item in e3_report["clips"] if item["clip_id"] == clip_id)
     camera_scales = {
@@ -134,7 +150,12 @@ def run_e2a(config_path: str | Path) -> dict[str, Any]:
         "experiment": "E2a_fixed_human_controlled_ego",
         "clip_id": clip_id,
         "design": "Each fixed GEM incam result is grounded with No ego, DROID, and MegaSAM; repeated for both GEM sources.",
-        "metric_note": "Path length, net displacement, and root speed are rigid-coordinate invariant. Top-down plots are qualitative because backend world axes are not aligned.",
+        "metric_note": "Endpoint displacement, valid-step path length, and root speed are rigid-coordinate invariant. All conditions for one fixed human use the same validity mask. Top-down plots are qualitative because backend world axes are not aligned.",
+        "validity_rule": {
+            "max_root_speed_mps": max_root_speed_mps,
+            "jump_mad_factor": jump_mad_factor,
+            "support": "intersection across No ego, DROID, and MegaSAM for each fixed human",
+        },
         "human_sources": {},
     }
     for human_method, human_spec in config["human_sources"].items():
@@ -150,33 +171,61 @@ def run_e2a(config_path: str | Path) -> dict[str, Any]:
         for camera_method, camera in cameras.items():
             rotation, center, timestamps = _align_camera(camera, source_frames)
             position = np.einsum("nij,nj->ni", rotation, transl) + camera_scales[camera_method] * center
-            metrics, speed, cumulative = _trajectory_metrics(position, timestamps)
+            dt, step, speed = _trajectory_series(position, timestamps)
             trajectories[camera_method] = {
                 "position": position,
                 "timestamps": timestamps,
+                "dt": dt,
+                "step": step,
                 "speed": speed,
-                "cumulative_distance": cumulative,
-                "metrics": metrics,
             }
             if reference_timestamps is None:
                 reference_timestamps = timestamps
 
         assert reference_timestamps is not None
-        no_ego_metrics, no_ego_speed, no_ego_cumulative = _trajectory_metrics(transl, reference_timestamps)
+        no_ego_dt, no_ego_step, no_ego_speed = _trajectory_series(transl, reference_timestamps)
         trajectories = {
             "no_ego": {
                 "position": transl,
                 "timestamps": reference_timestamps,
+                "dt": no_ego_dt,
+                "step": no_ego_step,
                 "speed": no_ego_speed,
-                "cumulative_distance": no_ego_cumulative,
-                "metrics": no_ego_metrics,
             },
             **trajectories,
         }
+        common_valid = np.ones(len(transl) - 1, dtype=bool)
+        condition_validity = {}
+        for condition, item in trajectories.items():
+            robust_valid, jump_threshold = robust_interval_validity(item["step"], jump_mad_factor)
+            valid = (
+                robust_valid
+                & np.isfinite(item["speed"])
+                & np.isfinite(item["dt"])
+                & (item["dt"] > 0)
+                & (item["speed"] <= max_root_speed_mps)
+            )
+            condition_validity[condition] = {
+                "independent_valid_interval_ratio": float(np.mean(valid)),
+                "jump_threshold_m": jump_threshold,
+            }
+            common_valid &= valid
+        if not np.any(common_valid):
+            raise ValueError(f"{human_method}: no common valid E2a intervals")
+        for item in trajectories.values():
+            metrics, plot_speed, cumulative = _trajectory_metrics(
+                item["position"], item["step"], item["speed"], common_valid
+            )
+            item["metrics"] = metrics
+            item["speed"] = plot_speed
+            item["cumulative_distance"] = cumulative
         report["human_sources"][human_method] = {
             "n_frames": int(len(transl)),
             "source_frame_start": int(source_frames[0]),
             "source_frame_end": int(source_frames[-1]),
+            "common_valid_intervals": int(np.sum(common_valid)),
+            "common_valid_interval_ratio": float(np.mean(common_valid)),
+            "condition_validity": condition_validity,
             "conditions": {condition: item["metrics"] for condition, item in trajectories.items()},
         }
         save_arrays: dict[str, np.ndarray] = {"source_frames": source_frames}
@@ -184,10 +233,10 @@ def run_e2a(config_path: str | Path) -> dict[str, Any]:
             save_arrays[f"{condition}__position"] = item["position"]
             save_arrays[f"{condition}__timestamps"] = item["timestamps"]
             save_arrays[f"{condition}__speed"] = item["speed"]
+        save_arrays["common_valid_interval"] = common_valid
         np.savez_compressed(output_dir / f"e2a__human_{human_method}.npz", **save_arrays)
         _plot_invariant(output_dir / f"e2a__human_{human_method}__invariant.png", f"E2a fixed human: {human_method}", trajectories)
         _plot_qualitative(output_dir / f"e2a__human_{human_method}__topdown.png", f"E2a fixed human: {human_method}", trajectories)
 
     save_json(output_dir / "e2a_report.json", report)
     return report
-

@@ -2,6 +2,7 @@
   "clip_id": "example_clip",
   "e3_report": "/absolute/path/to/results/e3_pilot/e3_report.json",
   "output_dir": "/absolute/path/to/results/e2a_pilot",
+  "parameters": {"max_root_speed_mps": 8.0, "jump_mad_factor": 12.0},
   "human_sources": {
     "megasam": {"path": "/absolute/path/to/megasam/smpl_params.pt"},
     "droid": {"path": "/absolute/path/to/droid/smpl_params.pt"}
@@ -11,4 +12,3 @@
     "megasam": {"path": "/absolute/path/to/megasam/target_camera_trajectory.npz", "frame_numbers_are_source": true}
   }
 }
-
