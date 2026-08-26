@@ -18,3 +18,6 @@ export PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
 cd "${REPO_ROOT}"
 "${PYTHON_BIN}" -m unittest discover -s tests -v
 "${PYTHON_BIN}" scripts/run_e3.py --config "${E3_CONFIG}"
+if [[ -n "${E2A_CONFIG:-}" ]]; then
+    "${PYTHON_BIN}" scripts/run_e2a.py --config "${E2A_CONFIG}"
+fi
