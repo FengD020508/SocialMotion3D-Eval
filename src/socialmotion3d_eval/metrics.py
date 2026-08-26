@@ -31,6 +31,83 @@ def rotation_validity(rotation: np.ndarray, orthogonality_tolerance: float, dete
     return finite & (orthogonality_error <= orthogonality_tolerance) & (determinant_error <= determinant_tolerance)
 
 
+def _percentile_or_none(values: np.ndarray, percentile: float) -> float | None:
+    values = np.asarray(values, dtype=np.float64)
+    values = values[np.isfinite(values)]
+    return float(np.percentile(values, percentile)) if values.size else None
+
+
+def rotation_stability_metrics(rotation: np.ndarray, timestamps: np.ndarray) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
+    """Describe camera-orientation dynamics without claiming rotation ground truth."""
+    rotation = np.asarray(rotation, dtype=np.float64)
+    timestamps = np.asarray(timestamps, dtype=np.float64)
+    if rotation.ndim != 3 or rotation.shape[1:] != (3, 3) or len(rotation) != len(timestamps):
+        raise ValueError("rotation and timestamps have incompatible shapes")
+    if len(rotation) < 2:
+        raise ValueError("rotation diagnostics require at least two frames")
+
+    dt = np.diff(timestamps)
+    relative = np.einsum("nij,nkj->nik", rotation[1:], rotation[:-1])
+    cosine = np.clip((np.trace(relative, axis1=1, axis2=2) - 1.0) * 0.5, -1.0, 1.0)
+    step_angle_deg = np.degrees(np.arccos(cosine))
+    angular_speed_deg_s = np.divide(
+        step_angle_deg,
+        dt,
+        out=np.full_like(step_angle_deg, np.nan),
+        where=np.isfinite(dt) & (dt > 0),
+    )
+    acceleration_dt = 0.5 * (dt[:-1] + dt[1:])
+    angular_acceleration_deg_s2 = np.divide(
+        np.abs(np.diff(angular_speed_deg_s)),
+        acceleration_dt,
+        out=np.full(max(0, len(angular_speed_deg_s) - 1), np.nan, dtype=np.float64),
+        where=np.isfinite(acceleration_dt) & (acceleration_dt > 0),
+    )
+
+    # Camera y-axis measures tilt relative to the initial orientation while
+    # ignoring pure yaw. Forward-axis heading is unwrapped for yaw drift.
+    up = rotation[:, :, 1]
+    tilt_deg = np.degrees(np.arccos(np.clip(up @ up[0], -1.0, 1.0)))
+    forward = rotation[:, :, 2]
+    yaw_deg = np.degrees(np.unwrap(np.arctan2(forward[:, 0], forward[:, 2])))
+
+    report = {
+        "relative_rotation_step_deg": {
+            "median": _percentile_or_none(step_angle_deg, 50),
+            "p95": _percentile_or_none(step_angle_deg, 95),
+            "max": _percentile_or_none(step_angle_deg, 100),
+        },
+        "angular_speed_deg_s": {
+            "median": _percentile_or_none(angular_speed_deg_s, 50),
+            "p95": _percentile_or_none(angular_speed_deg_s, 95),
+            "max": _percentile_or_none(angular_speed_deg_s, 100),
+        },
+        "angular_acceleration_deg_s2": {
+            "median": _percentile_or_none(angular_acceleration_deg_s2, 50),
+            "p95": _percentile_or_none(angular_acceleration_deg_s2, 95),
+            "max": _percentile_or_none(angular_acceleration_deg_s2, 100),
+        },
+        "tilt_from_initial_deg": {
+            "median": _percentile_or_none(tilt_deg, 50),
+            "p95": _percentile_or_none(tilt_deg, 95),
+            "max": _percentile_or_none(tilt_deg, 100),
+        },
+        "yaw_deg": {
+            "net": float(yaw_deg[-1] - yaw_deg[0]),
+            "range": float(np.max(yaw_deg) - np.min(yaw_deg)),
+        },
+        "interpretation": "diagnostic only; no external rotation ground truth",
+    }
+    arrays = {
+        "rotation_step_deg": step_angle_deg,
+        "angular_speed_deg_s": angular_speed_deg_s,
+        "angular_acceleration_deg_s2": angular_acceleration_deg_s2,
+        "tilt_from_initial_deg": tilt_deg,
+        "yaw_deg": yaw_deg,
+    }
+    return report, arrays
+
+
 def robust_interval_validity(displacement: np.ndarray, mad_factor: float) -> tuple[np.ndarray, float]:
     displacement = np.asarray(displacement, dtype=np.float64)
     finite = np.isfinite(displacement)
@@ -86,7 +163,11 @@ def build_motion_series(
     if tracking_failed is not None:
         backend_failed_ratio = float(np.mean(np.asarray(tracking_failed, dtype=bool)))
 
+    rotation_report, rotation_arrays = rotation_stability_metrics(rotation, timestamps)
+
     return {
+        "camera_center": center,
+        "rotation": rotation,
         "frame_numbers": frame_numbers,
         "timestamps": timestamps,
         "dt": dt,
@@ -98,6 +179,8 @@ def build_motion_series(
         "interval_valid": interval_valid,
         "jump_threshold_raw_units": jump_threshold,
         "backend_failed_ratio": backend_failed_ratio,
+        "rotation_stability": rotation_report,
+        "rotation_arrays": rotation_arrays,
     }
 
 
@@ -316,6 +399,7 @@ def evaluate_scaled_series(
             "backend_reported_failed_ratio": series["backend_failed_ratio"],
             "jump_threshold_raw_units": series["jump_threshold_raw_units"],
         },
+        "rotation_stability": series["rotation_stability"],
     }
     arrays = {
         "prediction_speed_mps": prediction,

@@ -102,7 +102,10 @@ def load_obd_speed_kmh(path: str | Path) -> dict[int, float]:
         if "id" not in attributes or "OBD_speed" not in attributes:
             continue
         try:
-            frame_id = int(float(attributes["id"]))
+            # Extracted clips renumber ``id`` from zero, while ``source_id``
+            # retains the frame number used by the full source video and by
+            # the camera-trajectory exporters.
+            frame_id = int(float(attributes.get("source_id", attributes["id"])))
             speed = float(attributes["OBD_speed"])
         except (TypeError, ValueError):
             continue
@@ -120,4 +123,3 @@ def align_obd_speed_mps(obd_by_frame_kmh: dict[int, float], frame_numbers: np.nd
         if speed is not None:
             values[index] = speed / 3.6
     return values
-

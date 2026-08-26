@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from socialmotion3d_eval.metrics import build_motion_series, evaluate_scaled_series, safe_pearson
+from socialmotion3d_eval.metrics import build_motion_series, evaluate_scaled_series, rotation_stability_metrics, safe_pearson
 
 
 class MetricTests(unittest.TestCase):
@@ -59,6 +59,22 @@ class MetricTests(unittest.TestCase):
         scale, diagnostics = fit_nonnegative_scale(visual, obd, np.ones(100, dtype=bool))
         self.assertAlmostEqual(scale, 2.0, places=10)
         self.assertLess(diagnostics["ols_scale_diagnostic"], 0.1)
+
+    def test_rotation_stability_separates_yaw_from_tilt(self) -> None:
+        fps = 30.0
+        yaw = np.deg2rad(np.arange(61, dtype=np.float64))
+        rotation = np.zeros((len(yaw), 3, 3), dtype=np.float64)
+        rotation[:, 0, 0] = np.cos(yaw)
+        rotation[:, 0, 2] = np.sin(yaw)
+        rotation[:, 1, 1] = 1.0
+        rotation[:, 2, 0] = -np.sin(yaw)
+        rotation[:, 2, 2] = np.cos(yaw)
+        report, arrays = rotation_stability_metrics(rotation, np.arange(len(yaw), dtype=np.float64) / fps)
+        self.assertAlmostEqual(report["relative_rotation_step_deg"]["p95"], 1.0, places=9)
+        self.assertAlmostEqual(report["angular_speed_deg_s"]["p95"], 30.0, places=8)
+        self.assertLess(report["tilt_from_initial_deg"]["max"], 1e-9)
+        self.assertAlmostEqual(report["yaw_deg"]["net"], 60.0, places=9)
+        self.assertEqual(len(arrays["rotation_step_deg"]), len(yaw) - 1)
 
 
 if __name__ == "__main__":

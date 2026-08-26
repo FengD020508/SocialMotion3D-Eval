@@ -47,6 +47,7 @@ def _flat_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             accuracy = result["accuracy"]
             validity = result["validity"]
+            rotation = result["rotation_stability"]
             row = {
                 "clip_id": clip["clip_id"],
                 "method": method,
@@ -63,6 +64,12 @@ def _flat_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "interval_valid_ratio": validity["interval_valid_ratio"],
                 "common_interval_valid_ratio": validity["common_interval_valid_ratio"],
                 "backend_reported_failed_ratio": validity["backend_reported_failed_ratio"],
+                "rotation_step_p95_deg": rotation["relative_rotation_step_deg"]["p95"],
+                "angular_speed_p95_deg_s": rotation["angular_speed_deg_s"]["p95"],
+                "angular_acceleration_p95_deg_s2": rotation["angular_acceleration_deg_s2"]["p95"],
+                "tilt_from_initial_max_deg": rotation["tilt_from_initial_deg"]["max"],
+                "yaw_net_deg": rotation["yaw_deg"]["net"],
+                "yaw_range_deg": rotation["yaw_deg"]["range"],
             }
             for window, metrics in result["wrde"].items():
                 row[f"wrde_{window}_mean"] = metrics["mean"]
@@ -93,6 +100,18 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
             "rmse_mps_mean": float(np.mean([item["accuracy"]["rmse_mps"] for item in results])),
             "rmse_mps_median": float(np.median([item["accuracy"]["rmse_mps"] for item in results])),
             "interval_valid_ratio_mean": float(np.mean([item["validity"]["interval_valid_ratio"] for item in results])),
+            "rotation_step_p95_deg_median": float(
+                np.median([item["rotation_stability"]["relative_rotation_step_deg"]["p95"] for item in results])
+            ),
+            "angular_speed_p95_deg_s_median": float(
+                np.median([item["rotation_stability"]["angular_speed_deg_s"]["p95"] for item in results])
+            ),
+            "angular_acceleration_p95_deg_s2_median": float(
+                np.median([item["rotation_stability"]["angular_acceleration_deg_s2"]["p95"] for item in results])
+            ),
+            "tilt_from_initial_max_deg_median": float(
+                np.median([item["rotation_stability"]["tilt_from_initial_deg"]["max"] for item in results])
+            ),
         }
         pearson = [item["accuracy"]["pearson_r"] for item in results if item["accuracy"]["pearson_r"] is not None]
         output["methods"][method]["pearson_r_mean"] = float(np.mean(pearson)) if pearson else None
@@ -112,6 +131,24 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
             "rmse_mps_median_delta": float(np.median([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])),
             "interval_valid_ratio_mean_delta": float(
                 np.mean([m["validity"]["interval_valid_ratio"] - d["validity"]["interval_valid_ratio"] for d, m in paired])
+            ),
+            "rotation_step_p95_deg_median_delta": float(
+                np.median(
+                    [
+                        m["rotation_stability"]["relative_rotation_step_deg"]["p95"]
+                        - d["rotation_stability"]["relative_rotation_step_deg"]["p95"]
+                        for d, m in paired
+                    ]
+                )
+            ),
+            "tilt_from_initial_max_deg_median_delta": float(
+                np.median(
+                    [
+                        m["rotation_stability"]["tilt_from_initial_deg"]["max"]
+                        - d["rotation_stability"]["tilt_from_initial_deg"]["max"]
+                        for d, m in paired
+                    ]
+                )
             ),
             "interpretation": "descriptive pilot delta only; no significance claim",
         }
@@ -139,6 +176,7 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
             "evaluation": f"remaining {1.0 - calibration_fraction:.0%}",
             "accuracy_support": "intersection of recomputed DROID/MegaSAM validity and finite OBD",
             "backend_failure_flags": "diagnostic only; not used to define validity",
+            "rotation_stability": "relative rotation, angular speed/acceleration, tilt and yaw are diagnostics only because no rotation ground truth is available",
             "direction_boundary": "OBD speed is scalar: it validates scale/speed magnitude, not world-axis sign. Direction is audited structurally and E2a quantitative metrics are rigid-coordinate invariant.",
             "parameters": parameters,
         },
@@ -202,11 +240,29 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
                     method_report["status"] = "ok"
                     clip_report["methods"][method] = method_report
                     arrays_by_method[method] = arrays
+                    rotation_arrays = series["rotation_arrays"]
                     np.savez_compressed(
                         output_dir / f"{clip_id}__{method}__series.npz",
                         frame_numbers=series["frame_numbers"],
                         timestamps=series["timestamps"],
                         **arrays,
+                        **rotation_arrays,
+                    )
+
+                    scale = float(method_report["scale_m_per_raw_unit"])
+                    metric_c2w = np.repeat(np.eye(4, dtype=np.float64)[None], len(series["camera_center"]), axis=0)
+                    metric_c2w[:, :3, :3] = series["rotation"]
+                    metric_c2w[:, :3, 3] = scale * series["camera_center"]
+                    np.savez_compressed(
+                        output_dir / f"{clip_id}__{method}__camera_metric.npz",
+                        frame_numbers=series["frame_numbers"],
+                        timestamps=series["timestamps"],
+                        fps=np.asarray([float(clip.get("fps", 30.0))], dtype=np.float64),
+                        scale_m_per_raw_unit=np.asarray([scale], dtype=np.float64),
+                        camera_center_m=metric_c2w[:, :3, 3],
+                        R_c2w=metric_c2w[:, :3, :3],
+                        T_c2w=metric_c2w,
+                        T_w2c=np.linalg.inv(metric_c2w),
                     )
                 except Exception as exc:
                     clip_report["methods"][method] = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}

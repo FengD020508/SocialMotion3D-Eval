@@ -16,8 +16,9 @@
 - Scale stability：先用前 40% 拟合全局尺度，再在后 60% 的 1、2、3 秒滑窗内计算 `OBD路程 / 已标定预测路程` 的局部尺度修正比（理想值 1），报告 median、IQR、CV。真实路程或预测路程低于 0.5 m 的窗口均不参与。
 - WRDE：在 1、2、3 秒滑窗内比较预测路程和 OBD 路程；OBD 路程小于 0.5 m 的窗口不参与，避免近零分母夸大误差。
 - Robustness：各方法独立的 frame/interval Valid Ratio；另报告方法自带 failed ratio。
+- Rotation stability diagnostic：报告相邻帧旋转角、角速度、角加速度、相对首帧倾斜，以及解缠后的 yaw 净变化/范围。车载视频允许真实转弯、颠簸和安装姿态变化，因此这些量只诊断抖动与漂移，不作为有真值的 rotation accuracy。
 
-5 段 pilot 只做描述性比较，报告逐片结果、宏平均和 MegaSAM−DROID 的配对差值，不据此声称统计显著性。
+5 段 pilot 只做描述性比较；扩展到 18 段后仍报告逐片结果、宏平均和 MegaSAM−DROID 的配对差值，并按昼夜、动作和难度分层查看，样本量不足时不声称统计显著性。
 
 边界：OBD 速度是标量，因此只能验证尺度和速度大小，不能单独判定 world 坐标轴的正负方向。方向验收依赖 `T_c2w/T_w2c` 互逆、SO(3)、既有 y-up 转换以及重投影/定性检查；论文中不能把标量速度相关性表述成“方向也已由 OBD 验证”。
 
@@ -38,6 +39,7 @@
 ## 输出与复现边界
 
 - `results/`：数值报告、逐帧序列和图，不进入代码仓库。
+- 每段 E3 另输出 OBD 标定后的 `camera_metric.npz`（米制 `camera_center_m/T_c2w/T_w2c`），供 E2a 和后续 world grounding 直接复用；这一步是后处理，不需要重新运行 GEM。
 - `data_private/`：OBD 和其他私有输入，不进入代码仓库。
 - `ops_private/`：集群命令、作业号、清理记录和提交版本，不进入代码仓库。
 - 代码、配置模板、协议和测试进入 GitHub。真实绝对路径配置以 `configs/private_*.json` 保存并忽略。
