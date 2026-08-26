@@ -130,6 +130,7 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
             "evaluation": f"remaining {1.0 - calibration_fraction:.0%}",
             "accuracy_support": "intersection of recomputed DROID/MegaSAM validity and finite OBD",
             "backend_failure_flags": "diagnostic only; not used to define validity",
+            "direction_boundary": "OBD speed is scalar: it validates scale/speed magnitude, not world-axis sign. Direction is audited structurally and E2a quantitative metrics are rigid-coordinate invariant.",
             "parameters": parameters,
         },
         "clips": [],
@@ -207,4 +208,3 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
             writer.writeheader()
             writer.writerows(rows)
     return report
-
