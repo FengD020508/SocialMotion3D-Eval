@@ -101,16 +101,40 @@ def build_motion_series(
     }
 
 
-def fit_nonnegative_scale(visual_speed: np.ndarray, obd_speed: np.ndarray, mask: np.ndarray) -> float:
-    valid = np.asarray(mask, dtype=bool) & np.isfinite(visual_speed) & np.isfinite(obd_speed)
+def fit_nonnegative_scale(
+    visual_speed: np.ndarray,
+    obd_speed: np.ndarray,
+    mask: np.ndarray,
+    *,
+    min_target_speed_mps: float = 0.5,
+) -> tuple[float, dict[str, Any]]:
+    visual_speed = np.asarray(visual_speed, dtype=np.float64)
+    obd_speed = np.asarray(obd_speed, dtype=np.float64)
+    valid = (
+        np.asarray(mask, dtype=bool)
+        & np.isfinite(visual_speed)
+        & np.isfinite(obd_speed)
+        & (visual_speed > 1e-9)
+        & (obd_speed >= min_target_speed_mps)
+    )
     if int(np.sum(valid)) < 10:
         raise ValueError("fewer than 10 valid calibration intervals")
-    x = np.asarray(visual_speed, dtype=np.float64)[valid]
-    y = np.asarray(obd_speed, dtype=np.float64)[valid]
+    x = visual_speed[valid]
+    y = obd_speed[valid]
     denominator = float(np.dot(x, x))
     if denominator <= 1e-12:
         raise ValueError("visual motion is degenerate in calibration interval")
-    return max(0.0, float(np.dot(x, y) / denominator))
+    ratios = y / x
+    scale = max(0.0, float(np.median(ratios)))
+    q25, q75 = np.percentile(ratios, [25, 75])
+    diagnostics = {
+        "estimator": "median_per_interval_scale_ratio",
+        "n_samples": int(len(ratios)),
+        "min_target_speed_mps": float(min_target_speed_mps),
+        "scale_ratio_iqr_raw_units": float(q75 - q25),
+        "ols_scale_diagnostic": max(0.0, float(np.dot(x, y) / denominator)),
+    }
+    return scale, diagnostics
 
 
 def safe_pearson(x: np.ndarray, y: np.ndarray) -> float | None:
@@ -236,6 +260,7 @@ def evaluate_scaled_series(
     fps: float,
     windows_seconds: Iterable[float],
     min_target_distance_m: float,
+    min_calibration_speed_mps: float = 0.5,
 ) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     n_intervals = len(series["dt"])
     split = min(n_intervals - 1, max(1, int(np.floor(n_intervals * calibration_fraction))))
@@ -244,7 +269,12 @@ def evaluate_scaled_series(
     calibration_mask = common_mask & (indices < split)
     evaluation_mask = common_mask & (indices >= split)
 
-    scale = fit_nonnegative_scale(series["visual_speed"], series["obd_speed"], calibration_mask)
+    scale, scale_diagnostics = fit_nonnegative_scale(
+        series["visual_speed"],
+        series["obd_speed"],
+        calibration_mask,
+        min_target_speed_mps=min_calibration_speed_mps,
+    )
     prediction = scale * np.asarray(series["visual_speed"], dtype=np.float64)
     accuracy = accuracy_metrics(prediction, series["obd_speed"], evaluation_mask)
     wrde = windowed_relative_distance_error(
@@ -267,6 +297,7 @@ def evaluate_scaled_series(
     )
     report = {
         "scale_m_per_raw_unit": scale,
+        "scale_calibration": scale_diagnostics,
         "calibration_intervals": int(np.sum(calibration_mask)),
         "evaluation_intervals": int(np.sum(evaluation_mask)),
         "accuracy": accuracy,

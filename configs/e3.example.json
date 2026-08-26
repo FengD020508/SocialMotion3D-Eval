@@ -7,7 +7,8 @@
     "orthogonality_tolerance": 0.1,
     "determinant_tolerance": 0.05,
     "wrde_windows_seconds": [1, 2, 3],
-    "min_target_distance_m": 0.5
+    "min_target_distance_m": 0.5,
+    "min_calibration_speed_mps": 0.5
   },
   "clips": [
     {
@@ -22,4 +23,3 @@
     }
   ]
 }
-

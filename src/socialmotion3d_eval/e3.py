@@ -52,6 +52,10 @@ def _flat_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "method": method,
                 "status": "ok",
                 "scale_m_per_raw_unit": result["scale_m_per_raw_unit"],
+                "scale_estimator": result["scale_calibration"]["estimator"],
+                "scale_calibration_samples": result["scale_calibration"]["n_samples"],
+                "scale_calibration_iqr_raw_units": result["scale_calibration"]["scale_ratio_iqr_raw_units"],
+                "scale_ols_diagnostic": result["scale_calibration"]["ols_scale_diagnostic"],
                 "mae_mps": accuracy["mae_mps"],
                 "rmse_mps": accuracy["rmse_mps"],
                 "pearson_r": accuracy["pearson_r"],
@@ -126,6 +130,7 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
     calibration_fraction = float(parameters.get("calibration_fraction", 0.4))
     windows_seconds = [float(value) for value in parameters.get("wrde_windows_seconds", [1, 2, 3])]
     min_target_distance = float(parameters.get("min_target_distance_m", 0.5))
+    min_calibration_speed = float(parameters.get("min_calibration_speed_mps", 0.5))
 
     report: dict[str, Any] = {
         "experiment": "E3_camera_speed_vs_obd",
@@ -192,6 +197,7 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
                         fps=float(clip.get("fps", 30.0)),
                         windows_seconds=windows_seconds,
                         min_target_distance_m=min_target_distance,
+                        min_calibration_speed_mps=min_calibration_speed,
                     )
                     method_report["status"] = "ok"
                     clip_report["methods"][method] = method_report

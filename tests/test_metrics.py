@@ -50,6 +50,16 @@ class MetricTests(unittest.TestCase):
     def test_constant_pearson_is_not_applicable(self) -> None:
         self.assertIsNone(safe_pearson(np.ones(10), np.arange(10)))
 
+    def test_scale_estimator_resists_visual_speed_spikes(self) -> None:
+        from socialmotion3d_eval.metrics import fit_nonnegative_scale
+
+        visual = np.ones(100)
+        visual[:10] = 100.0
+        obd = np.full(100, 2.0)
+        scale, diagnostics = fit_nonnegative_scale(visual, obd, np.ones(100, dtype=bool))
+        self.assertAlmostEqual(scale, 2.0, places=10)
+        self.assertLess(diagnostics["ols_scale_diagnostic"], 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()
