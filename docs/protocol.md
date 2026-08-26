@@ -13,7 +13,7 @@
 报告内容：
 
 - Accuracy：MAE、RMSE、Pearson correlation coefficient。若任一速度序列近似常量，Pearson 记为 `null`，不强行解释。
-- Scale stability：在 1、2、3 秒滑窗内重新估计局部尺度，报告 median、IQR、CV。
+- Scale stability：先用前 40% 拟合全局尺度，再在后 60% 的 1、2、3 秒滑窗内计算 `OBD路程 / 已标定预测路程` 的局部尺度修正比（理想值 1），报告 median、IQR、CV。真实路程或预测路程低于 0.5 m 的窗口均不参与。
 - WRDE：在 1、2、3 秒滑窗内比较预测路程和 OBD 路程；OBD 路程小于 0.5 m 的窗口不参与，避免近零分母夸大误差。
 - Robustness：各方法独立的 frame/interval Valid Ratio；另报告方法自带 failed ratio。
 

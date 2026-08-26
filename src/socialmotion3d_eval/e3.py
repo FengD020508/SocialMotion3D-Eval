@@ -85,7 +85,9 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
         output["methods"][method] = {
             "n_clips": len(results),
             "mae_mps_mean": float(np.mean([item["accuracy"]["mae_mps"] for item in results])),
+            "mae_mps_median": float(np.median([item["accuracy"]["mae_mps"] for item in results])),
             "rmse_mps_mean": float(np.mean([item["accuracy"]["rmse_mps"] for item in results])),
+            "rmse_mps_median": float(np.median([item["accuracy"]["rmse_mps"] for item in results])),
             "interval_valid_ratio_mean": float(np.mean([item["validity"]["interval_valid_ratio"] for item in results])),
         }
         pearson = [item["accuracy"]["pearson_r"] for item in results if item["accuracy"]["pearson_r"] is not None]
@@ -101,7 +103,9 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
         output["paired_megasam_minus_droid"] = {
             "n_clips": len(paired),
             "mae_mps_mean_delta": float(np.mean([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])),
+            "mae_mps_median_delta": float(np.median([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])),
             "rmse_mps_mean_delta": float(np.mean([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])),
+            "rmse_mps_median_delta": float(np.median([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])),
             "interval_valid_ratio_mean_delta": float(
                 np.mean([m["validity"]["interval_valid_ratio"] - d["validity"]["interval_valid_ratio"] for d, m in paired])
             ),
@@ -167,6 +171,12 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
                 clip_report["methods"][method] = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
 
         if len(series_by_method) == len(clip["cameras"]):
+            reference_series = next(iter(series_by_method.values()))
+            clip_report["source_frame_range_inclusive"] = [
+                int(reference_series["frame_numbers"][0]),
+                int(reference_series["frame_numbers"][-1]),
+            ]
+            clip_report["obd_interval_coverage_ratio"] = float(np.mean(np.isfinite(reference_series["obd_speed"])))
             common_mask = np.ones(len(next(iter(series_by_method.values()))["dt"]), dtype=bool)
             for series in series_by_method.values():
                 common_mask &= series["interval_valid"]

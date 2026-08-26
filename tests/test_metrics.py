@@ -45,6 +45,7 @@ class MetricTests(unittest.TestCase):
         self.assertLess(report["accuracy"]["mae_mps"], 1e-10)
         self.assertLess(report["accuracy"]["rmse_mps"], 1e-10)
         self.assertAlmostEqual(report["accuracy"]["pearson_r"], 1.0, places=10)
+        self.assertAlmostEqual(report["window_scale_stability"]["1s"]["median"], 1.0, places=10)
 
     def test_constant_pearson_is_not_applicable(self) -> None:
         self.assertIsNone(safe_pearson(np.ones(10), np.arange(10)))
@@ -52,4 +53,3 @@ class MetricTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

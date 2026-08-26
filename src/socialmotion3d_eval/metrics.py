@@ -180,7 +180,7 @@ def windowed_relative_distance_error(
 
 
 def window_scale_stability(
-    visual_speed_raw: np.ndarray,
+    calibrated_prediction_speed: np.ndarray,
     target_speed: np.ndarray,
     dt: np.ndarray,
     mask: np.ndarray,
@@ -189,12 +189,12 @@ def window_scale_stability(
     windows_seconds: Iterable[float],
     min_target_distance_m: float,
 ) -> dict[str, dict[str, Any]]:
-    visual_speed_raw = np.asarray(visual_speed_raw, dtype=np.float64)
+    calibrated_prediction_speed = np.asarray(calibrated_prediction_speed, dtype=np.float64)
     target_speed = np.asarray(target_speed, dtype=np.float64)
     dt = np.asarray(dt, dtype=np.float64)
     base_valid = (
         np.asarray(mask, dtype=bool)
-        & np.isfinite(visual_speed_raw)
+        & np.isfinite(calibrated_prediction_speed)
         & np.isfinite(target_speed)
         & np.isfinite(dt)
         & (dt > 0)
@@ -208,10 +208,10 @@ def window_scale_stability(
             if not np.all(base_valid[start:stop]):
                 continue
             target_distance = float(np.sum(target_speed[start:stop] * dt[start:stop]))
-            raw_distance = float(np.sum(visual_speed_raw[start:stop] * dt[start:stop]))
-            if target_distance < min_target_distance_m or raw_distance <= 1e-12:
+            predicted_distance = float(np.sum(calibrated_prediction_speed[start:stop] * dt[start:stop]))
+            if target_distance < min_target_distance_m or predicted_distance < min_target_distance_m:
                 continue
-            scales.append(target_distance / raw_distance)
+            scales.append(target_distance / predicted_distance)
         key = f"{float(seconds):g}s"
         if scales:
             values = np.asarray(scales, dtype=np.float64)
@@ -257,7 +257,7 @@ def evaluate_scaled_series(
         min_target_distance_m=min_target_distance_m,
     )
     stability = window_scale_stability(
-        series["visual_speed_raw"],
+        prediction,
         series["obd_speed"],
         series["dt"],
         evaluation_mask,
@@ -272,6 +272,12 @@ def evaluate_scaled_series(
         "accuracy": accuracy,
         "wrde": wrde,
         "window_scale_stability": stability,
+        "speed_support": {
+            "calibration_obd_mean_mps": float(np.mean(np.asarray(series["obd_speed"])[calibration_mask])),
+            "calibration_obd_std_mps": float(np.std(np.asarray(series["obd_speed"])[calibration_mask])),
+            "evaluation_obd_mean_mps": float(np.mean(np.asarray(series["obd_speed"])[evaluation_mask])),
+            "evaluation_obd_std_mps": float(np.std(np.asarray(series["obd_speed"])[evaluation_mask])),
+        },
         "validity": {
             "frame_valid_ratio": float(np.mean(series["frame_valid"])),
             "interval_valid_ratio": float(np.mean(series["interval_valid"])),
@@ -288,4 +294,3 @@ def evaluate_scaled_series(
         "evaluation_mask": evaluation_mask,
     }
     return report, arrays
-
