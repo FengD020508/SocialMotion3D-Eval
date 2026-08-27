@@ -10,6 +10,8 @@ E1 分为两层，避免把两类方法不共同定义的能力硬凑成一个�
 
 解释边界：没有 3D ground truth 时，较低 jerk 或骨长漂移只能支持“更稳定”，不能支持“姿态更准确”；social cue 保真度必须结合匿名人工评分。E1 允许出现 MotionBERT 在局部动作稳定性更好、但 GEM 因原生 SMPL 与动作—root trajectory 联合输出更适合 scene-ready MotionPool 的结论。
 
+E1c 将动作—轨迹耦合单独评估。主条件为 GEM 原生 global common-17、经过一次整段旋转/尺度适配后放置在相同 GEM root trajectory 上的 MotionBERT，以及只将 GEM root-relative articulation 错开 15 帧的负对照。负对照不循环、不补帧，只裁剪共同区间；另以 ±8、±15、±30 帧检查剂量响应。人工材料必须使用相同参考视频、骨架、地面、相机和轨迹视图。MotionBERT shared-root 是外部轨迹组装控制，不得写成 MotionBERT 原生轨迹输出；common-17 脚接触指标是诊断，不是真值物理接触误差。
+
 ## E3：DROID 与 MegaSAM 的 ego-motion 评估
 
 目标不是证明“使用 ego-motion 一定改善人体姿态”，而是检验两种相机轨迹恢复方法能否重建与车辆 OBD 一致的自车运动，并为 E2a 提供独立尺度。

@@ -1,0 +1,11 @@
+{
+  "manifest": "data_private/selection_manifest_23.json",
+  "motionbert_root": "results/e1_batch23_v1/motionbert",
+  "gem_root": "results/e1_batch23_v1/gem",
+  "output_root": "results/e1_batch23_v1/e1c",
+  "fps": 30.0,
+  "primary_shift_frames": 15,
+  "diagnostic_shift_frames": [-30, -15, -8, 0, 8, 15, 30],
+  "render_stride": 3,
+  "blind_seed": "e1c-batch23-v1"
+}

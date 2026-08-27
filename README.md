@@ -10,6 +10,7 @@ IDD-PeD 上 E1（MotionBERT/GEM）、E2a（固定人体、受控 ego-motion）�
 export PYTHONPATH="$PWD/src"
 python -m unittest discover -s tests -v
 python scripts/run_e1.py --config configs/private_e1_batch23.json --render-blind
+python scripts/run_e1c.py --config configs/private_e1c_batch23.json --render-blind
 python scripts/run_e3.py --config configs/private_e3_pilot.json
 python scripts/run_e2a.py --config configs/private_e2a_pilot.json
 ```
