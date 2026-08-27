@@ -11,13 +11,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pilot-manifest", type=Path, required=True)
     parser.add_argument("--extra-manifest", type=Path, required=True)
+    parser.add_argument("--supplement-manifest", type=Path)
+    parser.add_argument("--expected-count", type=int, default=18)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     pilot = json.loads(args.pilot_manifest.read_text(encoding="utf-8"))
     extra = json.loads(args.extra_manifest.read_text(encoding="utf-8"))
     clips = list(pilot["clips"])
-    for source in extra["clips"]:
+    sources = list(extra["clips"])
+    if args.supplement_manifest is not None:
+        supplement = json.loads(args.supplement_manifest.read_text(encoding="utf-8"))
+        sources.extend(supplement["clips"])
+
+    for source in sources:
         clip_start, clip_end = map(int, source["clip_frames"])
         track_start, track_end = map(int, source["track_frames"])
         effective_track = [max(clip_start, track_start), min(clip_end, track_end)]
@@ -50,8 +57,9 @@ def main() -> None:
         )
 
     identifiers = [str(item["output"]).split("_", 1)[0] for item in clips]
-    if len(clips) != 18 or identifiers != [f"{index:02d}" for index in range(1, 19)]:
-        raise ValueError(f"expected clip ids 01..18, got {identifiers}")
+    expected_ids = [f"{index:02d}" for index in range(1, args.expected_count + 1)]
+    if len(clips) != args.expected_count or identifiers != expected_ids:
+        raise ValueError(f"expected clip ids 01..{args.expected_count:02d}, got {identifiers}")
     output = {
         "dataset": "IDD-PeD",
         "fps": float(pilot.get("fps", 30.0)),

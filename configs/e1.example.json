@@ -1,0 +1,8 @@
+{
+  "manifest": "/path/to/selection_manifest_23.json",
+  "motionbert_root": "/path/to/results/e1_batch23_v1/motionbert",
+  "gem_root": "/path/to/results/e1_batch23_v1/gem",
+  "output_root": "/path/to/results/e1_batch23_v1/evaluation",
+  "fps": 30.0,
+  "blind_seed": "e1-batch23-v1"
+}

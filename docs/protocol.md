@@ -1,4 +1,14 @@
-# E2a / E3 pilot protocol
+# E1 / E2a / E3 pilot protocol
+
+## E1：MotionBERT 与 GEM 的人体运动比较
+
+E1 分为两层，避免把两类方法不共同定义的能力硬凑成一个“谁更准”的分数。
+
+第一层是共同关节空间的技术诊断。23 段视频使用同一目标行人的连续标注区间；MotionBERT 使用目标中心裁剪、AlphaPose Halpe-26、OneEuro 和固定 checkpoint，GEM 使用统一的 DROID+GEM 输出。GEM 的 SMPL-X 先回归 COCO-17，再构造 H36M-like common-17；两者按原视频 local frame 取交集。所有自动指标在 pelvis-relative、按骨架总骨长归一化后计算，包括有效帧比例、骨长 CV、关节速度/加速度/jerk 的 P95 和稳健时序离群比例。另报告刚体对齐后的方法间 normalized MPJPE，它只表示两种重建的分歧，不是真值误差。
+
+第二层是 social-cue fidelity 和系统能力。HG、LOS、FTT、crossing initiation、static 和 occlusion 片段使用相同骨架样式、匿名 A/B 顺序进行人工评分，记录技术成功、cue fidelity、onset fidelity 和偏好。能力表单独记录 native SMPL、native root trajectory 以及额外 fitting/轨迹标注步骤；不能因 MotionBERT 原生不输出 world trajectory 而给它虚构一个轨迹误差，也不能把 GEM 的相对/global translation 直接写成已获得绝对米制 world trajectory。
+
+解释边界：没有 3D ground truth 时，较低 jerk 或骨长漂移只能支持“更稳定”，不能支持“姿态更准确”；social cue 保真度必须结合匿名人工评分。E1 允许出现 MotionBERT 在局部动作稳定性更好、但 GEM 因原生 SMPL 与动作—root trajectory 联合输出更适合 scene-ready MotionPool 的结论。
 
 ## E3：DROID 与 MegaSAM 的 ego-motion 评估
 
