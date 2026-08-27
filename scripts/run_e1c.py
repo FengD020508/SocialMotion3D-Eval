@@ -12,12 +12,14 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FFMpegWriter
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from socialmotion3d_eval.e1 import BONES, align_by_local_frame
 from socialmotion3d_eval.e1c import (
     construct_shared_root_variants,
     coupling_metrics,
     desynchronize_articulation,
+    infer_ankle_contacts,
 )
 
 
@@ -114,22 +116,201 @@ def blind_pair(seed: str, scene: str, comparison: str, left: str, right: str) ->
     return (left, right) if int(digest[:8], 16) % 2 == 0 else (right, left)
 
 
-def _floor_grid(axis, root: np.ndarray, ground: float, radius: float, spacing: float) -> None:
+LEFT_BONES = {(0, 4), (4, 5), (5, 6), (8, 11), (11, 12), (12, 13)}
+RIGHT_BONES = {(0, 1), (1, 2), (2, 3), (8, 14), (14, 15), (15, 16)}
+
+
+def _plot_coordinates(points: np.ndarray) -> np.ndarray:
+    points = np.asarray(points, dtype=np.float64)
+    return points[..., [0, 2, 1]]
+
+
+def _cylinder_faces(start: np.ndarray, end: np.ndarray, radius: float, sides: int = 7) -> list[np.ndarray]:
+    start = np.asarray(start, dtype=np.float64)
+    end = np.asarray(end, dtype=np.float64)
+    direction = end - start
+    length = float(np.linalg.norm(direction))
+    if length < 1e-8:
+        return []
+    axis = direction / length
+    helper = np.asarray([0.0, 1.0, 0.0])
+    if abs(float(np.dot(axis, helper))) > 0.9:
+        helper = np.asarray([1.0, 0.0, 0.0])
+    basis_a = np.cross(axis, helper)
+    basis_a /= np.linalg.norm(basis_a)
+    basis_b = np.cross(axis, basis_a)
+    angles = np.linspace(0.0, 2.0 * np.pi, sides, endpoint=False)
+    ring_start = np.stack(
+        [start + radius * (np.cos(angle) * basis_a + np.sin(angle) * basis_b) for angle in angles]
+    )
+    ring_end = ring_start + direction
+    faces = []
+    for index in range(sides):
+        next_index = (index + 1) % sides
+        faces.append(
+            _plot_coordinates(
+                np.stack([ring_start[index], ring_start[next_index], ring_end[next_index], ring_end[index]])
+            )
+        )
+    faces.append(_plot_coordinates(ring_start[::-1]))
+    faces.append(_plot_coordinates(ring_end))
+    return faces
+
+
+def _box_faces(
+    center: np.ndarray,
+    forward: np.ndarray,
+    half_length: float,
+    half_width: float,
+    half_height: float,
+) -> list[np.ndarray]:
+    forward = np.asarray(forward, dtype=np.float64)
+    forward[1] = 0.0
+    norm = float(np.linalg.norm(forward))
+    if norm < 1e-8:
+        forward = np.asarray([0.0, 0.0, 1.0])
+    else:
+        forward /= norm
+    side = np.asarray([-forward[2], 0.0, forward[0]])
+    up = np.asarray([0.0, 1.0, 0.0])
+    corners = []
+    for length_sign, width_sign, height_sign in (
+        (-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1),
+        (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1),
+    ):
+        corners.append(
+            center
+            + length_sign * half_length * forward
+            + width_sign * half_width * side
+            + height_sign * half_height * up
+        )
+    corners = np.asarray(corners)
+    indices = ((0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0))
+    return [_plot_coordinates(corners[list(face)]) for face in indices]
+
+
+def _floor_material(axis, root: np.ndarray, ground: float, radius: float, spacing: float) -> None:
     spacing = max(float(spacing), 1e-3)
     x0 = np.floor((root[0] - radius) / spacing) * spacing
     z0 = np.floor((root[2] - radius) / spacing) * spacing
     values_x = np.arange(x0, root[0] + radius + spacing, spacing)
     values_z = np.arange(z0, root[2] + radius + spacing, spacing)
-    for value in values_x:
-        axis.plot(
-            [value, value], [root[2] - radius, root[2] + radius], [ground, ground],
-            color="#d1d5db", linewidth=0.45, alpha=0.75,
+    faces = []
+    colors = []
+    for x_index, x_value in enumerate(values_x[:-1]):
+        for z_index, z_value in enumerate(values_z[:-1]):
+            faces.append(
+                np.asarray(
+                    [
+                        [x_value, z_value, ground],
+                        [x_value + spacing, z_value, ground],
+                        [x_value + spacing, z_value + spacing, ground],
+                        [x_value, z_value + spacing, ground],
+                    ]
+                )
+            )
+            colors.append("#343a40" if (x_index + z_index) % 2 == 0 else "#454c55")
+    collection = Poly3DCollection(
+        faces, facecolors=colors, edgecolors="#616b76", linewidths=0.35, alpha=1.0
+    )
+    axis.add_collection3d(collection)
+
+
+def _path_direction(root_path: np.ndarray, frame_index: int) -> np.ndarray:
+    previous_index = max(frame_index - 2, 0)
+    next_index = min(frame_index + 2, len(root_path) - 1)
+    direction = root_path[next_index] - root_path[previous_index]
+    direction[1] = 0.0
+    return direction
+
+
+def _body_forward(joints: np.ndarray, path_direction: np.ndarray) -> np.ndarray:
+    hip_axis = joints[4] - joints[1]
+    hip_axis[1] = 0.0
+    forward = np.asarray([-hip_axis[2], 0.0, hip_axis[0]])
+    if np.linalg.norm(forward) < 1e-8:
+        forward = np.asarray(path_direction, dtype=np.float64)
+    if np.linalg.norm(forward) < 1e-8:
+        forward = np.asarray([0.0, 0.0, 1.0])
+    forward /= np.linalg.norm(forward)
+    path_direction = np.asarray(path_direction, dtype=np.float64)
+    if np.linalg.norm(path_direction) > 1e-8 and np.dot(forward, path_direction) < 0:
+        forward *= -1.0
+    return forward
+
+
+def _render_mannequin(
+    axis,
+    joints: np.ndarray,
+    body_height: float,
+    ground: float,
+    path_direction: np.ndarray,
+    contacts: np.ndarray,
+) -> None:
+    all_faces = []
+    all_colors = []
+    for bone in BONES:
+        if bone in LEFT_BONES:
+            color = "#38bdf8"
+        elif bone in RIGHT_BONES:
+            color = "#fb923c"
+        else:
+            color = "#dbe4ee"
+        radius = body_height * (0.032 if bone in LEFT_BONES or bone in RIGHT_BONES else 0.045)
+        faces = _cylinder_faces(joints[bone[0]], joints[bone[1]], radius)
+        all_faces.extend(faces)
+        all_colors.extend([color] * len(faces))
+
+    torso_faces = _cylinder_faces(joints[0], joints[8], body_height * 0.105, sides=8)
+    pelvis_faces = _cylinder_faces(joints[1], joints[4], body_height * 0.075, sides=8)
+    shoulder_faces = _cylinder_faces(joints[11], joints[14], body_height * 0.065, sides=8)
+    for faces, color in (
+        (torso_faces, "#aebdca"), (pelvis_faces, "#94a3b8"), (shoulder_faces, "#cbd5e1")
+    ):
+        all_faces.extend(faces)
+        all_colors.extend([color] * len(faces))
+
+    forward = _body_forward(joints, path_direction)
+    for ankle, color in ((3, "#fb923c"), (6, "#38bdf8")):
+        center = joints[ankle] + forward * (0.055 * body_height)
+        center[1] = max(center[1], ground + 0.028 * body_height)
+        foot_faces = _box_faces(
+            center, forward, half_length=0.095 * body_height,
+            half_width=0.045 * body_height, half_height=0.025 * body_height,
         )
-    for value in values_z:
-        axis.plot(
-            [root[0] - radius, root[0] + radius], [value, value], [ground, ground],
-            color="#d1d5db", linewidth=0.45, alpha=0.75,
+        all_faces.extend(foot_faces)
+        all_colors.extend([color] * len(foot_faces))
+
+    axis.add_collection3d(
+        Poly3DCollection(
+            all_faces, facecolors=all_colors, edgecolors="#1f2937", linewidths=0.18, alpha=1.0
         )
+    )
+
+    head_center = joints[10]
+    u = np.linspace(0.0, 2.0 * np.pi, 9)
+    v = np.linspace(0.0, np.pi, 6)
+    head_radius = body_height * 0.072
+    head_x = head_center[0] + head_radius * np.outer(np.cos(u), np.sin(v))
+    head_y = head_center[1] + head_radius * np.outer(np.ones_like(u), np.cos(v))
+    head_z = head_center[2] + head_radius * np.outer(np.sin(u), np.sin(v))
+    axis.plot_surface(
+        head_x, head_z, head_y, color="#f0b88c", edgecolor="#1f2937", linewidth=0.15, shade=True
+    )
+
+    for joint_a, joint_b in BONES:
+        segment = joints[[joint_a, joint_b]]
+        axis.plot(
+            segment[:, 0], segment[:, 2], np.full(2, ground + 0.004 * body_height),
+            color="#0b0f14", linewidth=3.8, alpha=0.22,
+        )
+    for contact, ankle, color in zip(contacts, (3, 6), ("#fb923c", "#38bdf8")):
+        if contact:
+            axis.scatter(
+                [joints[ankle, 0]], [joints[ankle, 2]], [ground + 0.012 * body_height],
+                s=82, marker="o", facecolors="none", edgecolors=color,
+                linewidths=2.0, depthshade=False,
+            )
 
 
 def render_blind_pair_video(
@@ -153,40 +334,51 @@ def render_blind_pair_video(
     valid_data = np.concatenate([data_a[valid], data_b[valid]], axis=0)
     vertical_extent = np.ptp(valid_data[..., 1], axis=1) if len(valid_data) else np.asarray([1.0])
     body_height = max(float(np.median(vertical_extent)), 0.5)
-    radius = max(body_height * 0.85, 0.65)
+    radius = max(body_height * 0.68, 0.55)
     ground = float(np.percentile(valid_data[:, [3, 6], 1], 5)) if len(valid_data) else 0.0
     frame_indices = np.flatnonzero(valid)[::max(int(stride), 1)]
     if not len(frame_indices):
         raise ValueError(f"{scene}: no valid frames to render")
+    contacts_by_condition = {
+        method_a: infer_ankle_contacts(data_a, valid, fps),
+        method_b: infer_ankle_contacts(data_b, valid, fps),
+    }
 
-    figure = plt.figure(figsize=(12, 6), dpi=110)
+    figure = plt.figure(figsize=(12, 6), dpi=110, facecolor="#111827")
     grid = figure.add_gridspec(2, 3, height_ratios=(4.2, 1.15), hspace=0.04, wspace=0.05)
     reference_axis = figure.add_subplot(grid[0, 0])
     skeleton_axes = [figure.add_subplot(grid[0, column], projection="3d") for column in (1, 2)]
     path_axis = figure.add_subplot(grid[1, :])
 
-    reference_axis.set_title("Reference video")
+    reference_axis.set_title("Reference video", color="#f8fafc")
+    reference_axis.set_facecolor("#111827")
     reference_axis.set_axis_off()
     reference_artist = reference_axis.imshow(np.zeros((360, 360, 3), dtype=np.uint8))
 
     for label, axis in zip(("A", "B"), skeleton_axes):
-        axis.set_title(label)
+        axis.set_title(label, color="#f8fafc")
+        axis.set_facecolor("#1f2937")
         axis.set_box_aspect((1.0, 1.0, 1.3))
         axis.view_init(elev=17, azim=-65)
         axis.set_axis_off()
 
-    path_axis.plot(root_path[:, 0], root_path[:, 2], color="#9ca3af", linewidth=2.0)
-    traversed_line = path_axis.plot([], [], color="#2563eb", linewidth=2.6)[0]
-    path_point = path_axis.scatter([], [], color="#ef4444", s=30)
-    path_axis.set_title("Shared root trajectory (top view; red = current)", fontsize=9)
+    path_axis.set_facecolor("#1f2937")
+    path_axis.plot(root_path[:, 0], root_path[:, 2], color="#94a3b8", linewidth=2.0)
+    traversed_line = path_axis.plot([], [], color="#38bdf8", linewidth=2.8)[0]
+    path_point = path_axis.scatter([], [], color="#f43f5e", s=34)
+    path_axis.set_title("Shared root trajectory (top view; red = current)", fontsize=9, color="#f8fafc")
     path_axis.set_aspect("auto")
-    path_axis.grid(True, color="#e5e7eb", linewidth=0.6)
-    path_axis.tick_params(labelsize=7)
+    path_axis.grid(True, color="#475569", linewidth=0.6)
+    path_axis.tick_params(labelsize=7, colors="#cbd5e1")
+    for spine in path_axis.spines.values():
+        spine.set_color("#64748b")
     margin = max(body_height * 0.25, 0.1)
     path_axis.set_xlim(float(root_path[:, 0].min() - margin), float(root_path[:, 0].max() + margin))
     path_axis.set_ylim(float(root_path[:, 2].min() - margin), float(root_path[:, 2].max() + margin))
-    time_artist = path_axis.text(0.99, 0.86, "", transform=path_axis.transAxes, ha="right", fontsize=9)
-    figure.suptitle(f"{scene} | E1c blinded pair")
+    time_artist = path_axis.text(
+        0.99, 0.86, "", transform=path_axis.transAxes, ha="right", fontsize=9, color="#f8fafc"
+    )
+    figure.suptitle(f"{scene} | E1c blinded pair", color="#f8fafc")
 
     capture = FfmpegFrameReader(reference_video)
     writer = FFMpegWriter(
@@ -210,25 +402,25 @@ def render_blind_pair_video(
                 except (IndexError, RuntimeError):
                     pass
                 current_root = root_path[frame_index]
-                for axis, motion in zip(skeleton_axes, (data_a, data_b)):
+                direction = _path_direction(root_path, frame_index)
+                for axis, motion, method in zip(skeleton_axes, (data_a, data_b), (method_a, method_b)):
                     axis.cla()
-                    axis.set_title("A" if axis is skeleton_axes[0] else "B")
+                    axis.set_title("A" if axis is skeleton_axes[0] else "B", color="#f8fafc")
+                    axis.set_facecolor("#1f2937")
                     axis.set_box_aspect((1.0, 1.0, 1.3))
                     axis.view_init(elev=17, azim=-65)
                     axis.set_axis_off()
                     axis.set_xlim(current_root[0] - radius, current_root[0] + radius)
                     axis.set_ylim(current_root[2] - radius, current_root[2] + radius)
-                    axis.set_zlim(ground - 0.08 * body_height, ground + 1.35 * body_height)
-                    _floor_grid(axis, current_root, ground, radius, body_height * 0.35)
-                    for joint_a, joint_b in BONES:
-                        segment = motion[frame_index, [joint_a, joint_b]]
-                        axis.plot(
-                            segment[:, 0], segment[:, 2], segment[:, 1],
-                            color="#2563eb", linewidth=2.4,
-                        )
+                    axis.set_zlim(ground - 0.05 * body_height, ground + 1.18 * body_height)
+                    _floor_material(axis, current_root, ground, radius, body_height * 0.28)
+                    _render_mannequin(
+                        axis, motion[frame_index], body_height, ground, direction,
+                        contacts_by_condition[method][frame_index],
+                    )
                     axis.scatter(
                         [motion[frame_index, 0, 0]], [motion[frame_index, 0, 2]],
-                        [motion[frame_index, 0, 1]], color="#ef4444", s=12, depthshade=False,
+                        [motion[frame_index, 0, 1]], color="#f43f5e", s=13, depthshade=False,
                     )
                 traversed_line.set_data(root_path[: frame_index + 1, 0], root_path[: frame_index + 1, 2])
                 path_point.set_offsets([[current_root[0], current_root[2]]])
@@ -264,6 +456,7 @@ def main() -> None:
     parser.add_argument("--render-blind", action="store_true")
     parser.add_argument("--overwrite-videos", action="store_true")
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--scene")
     parser.add_argument("--output-root", type=Path)
     args = parser.parse_args()
 
@@ -286,7 +479,13 @@ def main() -> None:
     desync_rating_rows = []
     scene_reports = []
 
-    clips = manifest["clips"][: args.limit] if args.limit is not None else manifest["clips"]
+    clips = manifest["clips"]
+    if args.scene is not None:
+        clips = [clip for clip in clips if Path(clip["output"]).stem == args.scene]
+        if not clips:
+            raise ValueError(f"scene not found in manifest: {args.scene}")
+    if args.limit is not None:
+        clips = clips[: args.limit]
     for clip in clips:
         scene = Path(clip["output"]).stem
         cue = cue_label(clip)

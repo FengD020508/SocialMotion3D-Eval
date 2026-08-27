@@ -97,6 +97,35 @@ def desynchronize_articulation(
     )
 
 
+def infer_ankle_contacts(
+    motion: np.ndarray,
+    valid: np.ndarray,
+    fps: float,
+) -> np.ndarray:
+    """Infer left/right ankle contact from low height and low vertical speed."""
+    motion = np.asarray(motion, dtype=np.float64)
+    valid = np.asarray(valid, dtype=bool) & np.isfinite(motion).all(axis=(1, 2))
+    if motion.ndim != 3 or motion.shape[1:] != (17, 3) or len(valid) != len(motion):
+        raise ValueError("motion must be [T,17,3] and valid must be [T]")
+    scale = body_scale(motion, valid)
+    contacts = np.zeros((len(motion), 2), dtype=bool)
+    if not np.isfinite(scale) or float(fps) <= 0:
+        return contacts
+    local = motion - motion[:, :1, :]
+    for column, ankle in enumerate((3, 6)):
+        relative_height = local[:, ankle, 1]
+        height_values = relative_height[valid]
+        if not len(height_values):
+            continue
+        low_height = float(np.percentile(height_values, 35)) + 0.02 * scale
+        relative_vertical_speed = np.zeros(len(motion), dtype=np.float64)
+        relative_vertical_speed[1:] = np.abs(np.diff(relative_height)) * float(fps)
+        contacts[:, column] = (
+            valid & (relative_height <= low_height) & (relative_vertical_speed <= 0.12 * scale)
+        )
+    return contacts
+
+
 def coupling_metrics(motion: np.ndarray, valid: np.ndarray, fps: float) -> dict[str, float | int]:
     """Trajectory/articulation diagnostics in body-scale-normalized units.
 
@@ -134,15 +163,9 @@ def coupling_metrics(motion: np.ndarray, valid: np.ndarray, fps: float) -> dict[
     root_speed_values = root_speed[pair_valid]
 
     contact_speeds = []
-    for ankle in (3, 6):
-        relative_height = local[:, ankle, 1]
-        height_values = relative_height[valid]
-        if not len(height_values):
-            continue
-        low_height = float(np.percentile(height_values, 35)) + 0.02 * scale
-        relative_vertical_speed = np.zeros(len(motion), dtype=np.float64)
-        relative_vertical_speed[1:] = np.abs(np.diff(relative_height)) * fps
-        contact = valid & (relative_height <= low_height) & (relative_vertical_speed <= 0.12 * scale)
+    contacts = infer_ankle_contacts(motion, valid, fps)
+    for column, ankle in enumerate((3, 6)):
+        contact = contacts[:, column]
         contact_pair = contact[1:] & contact[:-1] & pair_valid
         foot_velocity = np.diff(motion[:, ankle, [0, 2]], axis=0) * fps / scale
         foot_speed = np.linalg.norm(foot_velocity, axis=-1)
