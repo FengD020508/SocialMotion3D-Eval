@@ -42,24 +42,22 @@ def _flat_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for clip in report["clips"]:
         for method, result in clip.get("methods", {}).items():
-            if result.get("status") != "ok":
-                rows.append({"clip_id": clip["clip_id"], "method": method, "status": "error", "error": result.get("error")})
+            status = result.get("status")
+            if status == "error":
+                rows.append({"clip_id": clip["clip_id"], "method": method, "status": status, "error": result.get("error")})
                 continue
-            accuracy = result["accuracy"]
             validity = result["validity"]
             rotation = result["rotation_stability"]
             row = {
                 "clip_id": clip["clip_id"],
                 "method": method,
-                "status": "ok",
-                "scale_m_per_raw_unit": result["scale_m_per_raw_unit"],
-                "scale_estimator": result["scale_calibration"]["estimator"],
+                "status": status,
+                "error": result.get("error"),
+                "scale_m_per_raw_unit": result.get("scale_m_per_raw_unit"),
+                "scale_estimator": result["scale_calibration"].get("estimator"),
                 "scale_calibration_samples": result["scale_calibration"]["n_samples"],
-                "scale_calibration_iqr_raw_units": result["scale_calibration"]["scale_ratio_iqr_raw_units"],
-                "scale_ols_diagnostic": result["scale_calibration"]["ols_scale_diagnostic"],
-                "mae_mps": accuracy["mae_mps"],
-                "rmse_mps": accuracy["rmse_mps"],
-                "pearson_r": accuracy["pearson_r"],
+                "scale_calibration_iqr_raw_units": result["scale_calibration"].get("scale_ratio_iqr_raw_units"),
+                "scale_ols_diagnostic": result["scale_calibration"].get("ols_scale_diagnostic"),
                 "frame_valid_ratio": validity["frame_valid_ratio"],
                 "interval_valid_ratio": validity["interval_valid_ratio"],
                 "common_interval_valid_ratio": validity["common_interval_valid_ratio"],
@@ -71,6 +69,17 @@ def _flat_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "yaw_net_deg": rotation["yaw_deg"]["net"],
                 "yaw_range_deg": rotation["yaw_deg"]["range"],
             }
+            if status != "ok":
+                rows.append(row)
+                continue
+            accuracy = result["accuracy"]
+            row.update(
+                {
+                    "mae_mps": accuracy["mae_mps"],
+                    "rmse_mps": accuracy["rmse_mps"],
+                    "pearson_r": accuracy["pearson_r"],
+                }
+            )
             for window, metrics in result["wrde"].items():
                 row[f"wrde_{window}_mean"] = metrics["mean"]
                 row[f"wrde_{window}_n"] = metrics["n_windows"]
@@ -86,58 +95,70 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
     methods = sorted({method for clip in report["clips"] for method in clip.get("methods", {})})
     output: dict[str, Any] = {"methods": {}, "paired_megasam_minus_droid": {}}
     for method in methods:
+        rotation_results = [
+            clip["methods"][method]
+            for clip in report["clips"]
+            if method in clip.get("methods", {}) and "rotation_stability" in clip["methods"][method]
+        ]
         results = [
             clip["methods"][method]
             for clip in report["clips"]
             if method in clip.get("methods", {}) and clip["methods"][method].get("status") == "ok"
         ]
-        if not results:
+        if not results and not rotation_results:
             continue
         output["methods"][method] = {
             "n_clips": len(results),
-            "mae_mps_mean": float(np.mean([item["accuracy"]["mae_mps"] for item in results])),
-            "mae_mps_median": float(np.median([item["accuracy"]["mae_mps"] for item in results])),
-            "rmse_mps_mean": float(np.mean([item["accuracy"]["rmse_mps"] for item in results])),
-            "rmse_mps_median": float(np.median([item["accuracy"]["rmse_mps"] for item in results])),
-            "interval_valid_ratio_mean": float(np.mean([item["validity"]["interval_valid_ratio"] for item in results])),
+            "n_translation_clips": len(results),
+            "n_rotation_clips": len(rotation_results),
+            "mae_mps_mean": float(np.mean([item["accuracy"]["mae_mps"] for item in results])) if results else None,
+            "mae_mps_median": float(np.median([item["accuracy"]["mae_mps"] for item in results])) if results else None,
+            "rmse_mps_mean": float(np.mean([item["accuracy"]["rmse_mps"] for item in results])) if results else None,
+            "rmse_mps_median": float(np.median([item["accuracy"]["rmse_mps"] for item in results])) if results else None,
+            "interval_valid_ratio_mean": float(np.mean([item["validity"]["interval_valid_ratio"] for item in results])) if results else None,
             "rotation_step_p95_deg_median": float(
-                np.median([item["rotation_stability"]["relative_rotation_step_deg"]["p95"] for item in results])
+                np.median([item["rotation_stability"]["relative_rotation_step_deg"]["p95"] for item in rotation_results])
             ),
             "angular_speed_p95_deg_s_median": float(
-                np.median([item["rotation_stability"]["angular_speed_deg_s"]["p95"] for item in results])
+                np.median([item["rotation_stability"]["angular_speed_deg_s"]["p95"] for item in rotation_results])
             ),
             "angular_acceleration_p95_deg_s2_median": float(
-                np.median([item["rotation_stability"]["angular_acceleration_deg_s2"]["p95"] for item in results])
+                np.median([item["rotation_stability"]["angular_acceleration_deg_s2"]["p95"] for item in rotation_results])
             ),
             "tilt_from_initial_max_deg_median": float(
-                np.median([item["rotation_stability"]["tilt_from_initial_deg"]["max"] for item in results])
+                np.median([item["rotation_stability"]["tilt_from_initial_deg"]["max"] for item in rotation_results])
             ),
         }
         pearson = [item["accuracy"]["pearson_r"] for item in results if item["accuracy"]["pearson_r"] is not None]
         output["methods"][method]["pearson_r_mean"] = float(np.mean(pearson)) if pearson else None
 
     paired = []
+    rotation_paired = []
     for clip in report["clips"]:
         droid = clip.get("methods", {}).get("droid", {})
         megasam = clip.get("methods", {}).get("megasam", {})
         if droid.get("status") == "ok" and megasam.get("status") == "ok":
             paired.append((droid, megasam))
-    if paired:
+        if "rotation_stability" in droid and "rotation_stability" in megasam:
+            rotation_paired.append((droid, megasam))
+    if paired or rotation_paired:
         output["paired_megasam_minus_droid"] = {
             "n_clips": len(paired),
-            "mae_mps_mean_delta": float(np.mean([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])),
-            "mae_mps_median_delta": float(np.median([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])),
-            "rmse_mps_mean_delta": float(np.mean([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])),
-            "rmse_mps_median_delta": float(np.median([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])),
+            "n_translation_clips": len(paired),
+            "n_rotation_clips": len(rotation_paired),
+            "mae_mps_mean_delta": float(np.mean([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])) if paired else None,
+            "mae_mps_median_delta": float(np.median([m["accuracy"]["mae_mps"] - d["accuracy"]["mae_mps"] for d, m in paired])) if paired else None,
+            "rmse_mps_mean_delta": float(np.mean([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])) if paired else None,
+            "rmse_mps_median_delta": float(np.median([m["accuracy"]["rmse_mps"] - d["accuracy"]["rmse_mps"] for d, m in paired])) if paired else None,
             "interval_valid_ratio_mean_delta": float(
                 np.mean([m["validity"]["interval_valid_ratio"] - d["validity"]["interval_valid_ratio"] for d, m in paired])
-            ),
+            ) if paired else None,
             "rotation_step_p95_deg_median_delta": float(
                 np.median(
                     [
                         m["rotation_stability"]["relative_rotation_step_deg"]["p95"]
                         - d["rotation_stability"]["relative_rotation_step_deg"]["p95"]
-                        for d, m in paired
+                        for d, m in rotation_paired
                     ]
                 )
             ),
@@ -146,13 +167,67 @@ def _aggregate(report: dict[str, Any]) -> dict[str, Any]:
                     [
                         m["rotation_stability"]["tilt_from_initial_deg"]["max"]
                         - d["rotation_stability"]["tilt_from_initial_deg"]["max"]
-                        for d, m in paired
+                        for d, m in rotation_paired
                     ]
                 )
             ),
             "interpretation": "descriptive pilot delta only; no significance claim",
         }
     return output
+
+
+def _translation_not_evaluable_report(
+    series: dict[str, Any],
+    common_mask: np.ndarray,
+    *,
+    calibration_fraction: float,
+    min_calibration_speed_mps: float,
+    error: Exception,
+) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
+    """Keep scale-free diagnostics when OBD motion cannot identify metric scale."""
+    n_intervals = len(series["dt"])
+    split = min(n_intervals - 1, max(1, int(np.floor(n_intervals * calibration_fraction))))
+    indices = np.arange(n_intervals)
+    calibration_mask = np.asarray(common_mask, dtype=bool) & (indices < split)
+    evaluation_mask = np.asarray(common_mask, dtype=bool) & (indices >= split)
+    eligible = (
+        calibration_mask
+        & np.isfinite(series["visual_speed"])
+        & np.isfinite(series["obd_speed"])
+        & (np.asarray(series["visual_speed"]) > 1e-9)
+        & (np.asarray(series["obd_speed"]) >= min_calibration_speed_mps)
+    )
+    report = {
+        "status": "translation_not_evaluable",
+        "error": f"{type(error).__name__}: {error}",
+        "scale_m_per_raw_unit": None,
+        "scale_calibration": {
+            "estimator": None,
+            "n_samples": int(np.sum(eligible)),
+            "min_target_speed_mps": float(min_calibration_speed_mps),
+            "scale_ratio_iqr_raw_units": None,
+            "ols_scale_diagnostic": None,
+        },
+        "calibration_intervals": int(np.sum(calibration_mask)),
+        "evaluation_intervals": int(np.sum(evaluation_mask)),
+        "validity": {
+            "frame_valid_ratio": float(np.mean(series["frame_valid"])),
+            "interval_valid_ratio": float(np.mean(series["interval_valid"])),
+            "common_interval_valid_ratio": float(np.mean(common_mask)),
+            "backend_reported_failed_ratio": series["backend_failed_ratio"],
+            "jump_threshold_raw_units": series["jump_threshold_raw_units"],
+        },
+        "rotation_stability": series["rotation_stability"],
+        "interpretation": "Translation accuracy and metric camera are unavailable because OBD motion does not sufficiently excite scale calibration; rotation diagnostics remain valid.",
+    }
+    arrays = {
+        "obd_speed_mps": np.asarray(series["obd_speed"], dtype=np.float64),
+        "visual_speed_raw": np.asarray(series["visual_speed_raw"], dtype=np.float64),
+        "calibration_mask": calibration_mask,
+        "evaluation_mask": evaluation_mask,
+        "scale_calibration_eligible_mask": eligible,
+    }
+    return report, arrays
 
 
 def run_e3(config_path: str | Path) -> dict[str, Any]:
@@ -237,35 +312,51 @@ def run_e3(config_path: str | Path) -> dict[str, Any]:
                         min_target_distance_m=min_target_distance,
                         min_calibration_speed_mps=min_calibration_speed,
                     )
-                    method_report["status"] = "ok"
+                except ValueError as exc:
+                    method_report, arrays = _translation_not_evaluable_report(
+                        series,
+                        common_mask,
+                        calibration_fraction=calibration_fraction,
+                        min_calibration_speed_mps=min_calibration_speed,
+                        error=exc,
+                    )
                     clip_report["methods"][method] = method_report
-                    arrays_by_method[method] = arrays
-                    rotation_arrays = series["rotation_arrays"]
                     np.savez_compressed(
                         output_dir / f"{clip_id}__{method}__series.npz",
                         frame_numbers=series["frame_numbers"],
                         timestamps=series["timestamps"],
                         **arrays,
-                        **rotation_arrays,
+                        **series["rotation_arrays"],
                     )
+                    continue
 
-                    scale = float(method_report["scale_m_per_raw_unit"])
-                    metric_c2w = np.repeat(np.eye(4, dtype=np.float64)[None], len(series["camera_center"]), axis=0)
-                    metric_c2w[:, :3, :3] = series["rotation"]
-                    metric_c2w[:, :3, 3] = scale * series["camera_center"]
-                    np.savez_compressed(
-                        output_dir / f"{clip_id}__{method}__camera_metric.npz",
-                        frame_numbers=series["frame_numbers"],
-                        timestamps=series["timestamps"],
-                        fps=np.asarray([float(clip.get("fps", 30.0))], dtype=np.float64),
-                        scale_m_per_raw_unit=np.asarray([scale], dtype=np.float64),
-                        camera_center_m=metric_c2w[:, :3, 3],
-                        R_c2w=metric_c2w[:, :3, :3],
-                        T_c2w=metric_c2w,
-                        T_w2c=np.linalg.inv(metric_c2w),
-                    )
-                except Exception as exc:
-                    clip_report["methods"][method] = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+                method_report["status"] = "ok"
+                clip_report["methods"][method] = method_report
+                arrays_by_method[method] = arrays
+                rotation_arrays = series["rotation_arrays"]
+                np.savez_compressed(
+                    output_dir / f"{clip_id}__{method}__series.npz",
+                    frame_numbers=series["frame_numbers"],
+                    timestamps=series["timestamps"],
+                    **arrays,
+                    **rotation_arrays,
+                )
+
+                scale = float(method_report["scale_m_per_raw_unit"])
+                metric_c2w = np.repeat(np.eye(4, dtype=np.float64)[None], len(series["camera_center"]), axis=0)
+                metric_c2w[:, :3, :3] = series["rotation"]
+                metric_c2w[:, :3, 3] = scale * series["camera_center"]
+                np.savez_compressed(
+                    output_dir / f"{clip_id}__{method}__camera_metric.npz",
+                    frame_numbers=series["frame_numbers"],
+                    timestamps=series["timestamps"],
+                    fps=np.asarray([float(clip.get("fps", 30.0))], dtype=np.float64),
+                    scale_m_per_raw_unit=np.asarray([scale], dtype=np.float64),
+                    camera_center_m=metric_c2w[:, :3, 3],
+                    R_c2w=metric_c2w[:, :3, :3],
+                    T_c2w=metric_c2w,
+                    T_w2c=np.linalg.inv(metric_c2w),
+                )
             if len(arrays_by_method) == len(series_by_method):
                 _plot_clip(output_dir / f"{clip_id}__speed.png", clip_id, series_by_method, arrays_by_method)
         report["clips"].append(clip_report)
