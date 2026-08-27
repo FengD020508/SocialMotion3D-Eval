@@ -190,7 +190,15 @@ def render_blind_pair_video(
 
     capture = FfmpegFrameReader(reference_video)
     writer = FFMpegWriter(
-        fps=max(int(round(fps / max(int(stride), 1))), 1), codec="libx264", bitrate=2600
+        fps=max(int(round(fps / max(int(stride), 1))), 1),
+        codec="libx264",
+        bitrate=2600,
+        extra_args=[
+            "-pix_fmt", "yuv420p",
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-movflags", "+faststart",
+        ],
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
