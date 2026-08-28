@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>SocialMotion3D · E1c 人工盲评</title>
+  <meta name="description" content="GEM、MotionBERT 与动作—轨迹同步性的离线人工盲评工具。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">SM</span>
+      <div>
+        <strong>SocialMotion3D</strong>
+        <span>E1c 人工盲评</span>
+      </div>
+    </div>
+    <div class="progress-wrap" id="progress-wrap" hidden>
+      <div class="progress-label">
+        <span id="progress-text">0 / 46</span>
+        <span id="autosave-state">尚未保存</span>
+      </div>
+      <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+    </div>
+    <button class="button ghost compact" id="export-top" type="button" hidden>导出当前结果</button>
+  </header>
+
+  <main class="page-shell">
+    <section class="intro-layout" id="intro-screen">
+      <div class="hero-card">
+        <span class="eyebrow">OFFLINE BLIND REVIEW</span>
+        <h1>判断动作是否自然地<br>发生在这条轨迹上</h1>
+        <p class="hero-copy">全程约 20–30 分钟。结果只保存在当前浏览器；完成后请导出 CSV，并发回实验组织者。</p>
+        <div class="metric-row" aria-label="任务数量">
+          <div><strong>23</strong><span>动作方法比较</span></div>
+          <div><strong>23</strong><span>同步敏感性检查</span></div>
+          <div><strong>46</strong><span>总视频数</span></div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h2>开始前</h2>
+        <ol class="instruction-list">
+          <li><span>1</span><p>请独立评分，不与其他评审讨论，也不要寻找或打开 <code>blind_key.json</code>。</p></li>
+          <li><span>2</span><p>视频可重复播放。只记录明显可见的问题；看不出差异时请选择“无明显差异”。</p></li>
+          <li><span>3</span><p>球形头部没有视线方向，不评价 head yaw、LOS 或 FTT 的精细头部朝向。</p></li>
+        </ol>
+        <label class="field-label" for="reviewer-id">评审代号</label>
+        <input id="reviewer-id" class="text-input" type="text" maxlength="40" autocomplete="off" placeholder="例如 R01（请勿填写真实姓名）">
+        <p class="field-help">代号仅用于区分多位评审的导出文件。</p>
+        <button class="button primary full" id="start-review" type="button">开始评分</button>
+        <button class="button ghost full" id="resume-review" type="button" hidden>继续上次评分</button>
+        <p class="form-error" id="intro-error" role="alert"></p>
+      </div>
+    </section>
+
+    <section id="review-screen" hidden>
+      <div class="review-heading">
+        <div>
+          <span class="section-chip" id="section-chip">第一部分</span>
+          <span class="sample-count" id="sample-count">样本 1 / 23</span>
+          <h1 id="task-title">共享轨迹上的动作比较</h1>
+          <p id="task-instruction"></p>
+        </div>
+        <aside class="legend-card" id="legend-card"></aside>
+      </div>
+
+      <div class="video-card">
+        <video id="review-video" controls preload="metadata" playsinline>
+          当前浏览器无法播放该视频，请改用最新版 Edge 或 Chrome。
+        </video>
+        <div class="video-footer">
+          <span>左：原始参考视频</span>
+          <span>中 / 右：匿名结果 A / B</span>
+          <span>可暂停、拖动和重复播放</span>
+        </div>
+      </div>
+
+      <form class="rating-card" id="rating-form" novalidate>
+        <fieldset class="question-block primary-question">
+          <legend>这段视频能否正常评价？</legend>
+          <div class="choice-row two">
+            <label class="choice"><input type="radio" name="evaluable" value="yes"><span>可以评价</span></label>
+            <label class="choice"><input type="radio" name="evaluable" value="no"><span>无法评价</span></label>
+          </div>
+          <div id="not-evaluable-wrap" class="conditional" hidden>
+            <label class="field-label" for="not-evaluable-reason">主要原因</label>
+            <select id="not-evaluable-reason" name="not_evaluable_reason">
+              <option value="">请选择</option>
+              <option value="video_problem">视频无法播放或显示异常</option>
+              <option value="too_short">片段太短</option>
+              <option value="severe_occlusion">参考视频遮挡严重</option>
+              <option value="render_failure">A/B 人体明显崩坏，无法比较</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+        </fieldset>
+
+        <div id="shared-questions">
+          <div class="question-block">
+            <div class="question-heading">
+              <h2>明显问题检查</h2>
+              <p>每项选择存在问题的一侧；不要把正常侧身、转身或短暂脚步调整自动判为错误。</p>
+            </div>
+            <div class="issue-grid">
+              <label>
+                <span><strong>脚底滑动</strong><small>支撑脚贴地时地面明显从脚下滑过，或人物无迈步却持续平移。</small></span>
+                <select name="foot_slide" data-shared-required>
+                  <option value="">请选择</option><option value="none">两侧均无明显问题</option><option value="a">仅 A</option><option value="b">仅 B</option><option value="both">A、B 都有</option>
+                </select>
+              </label>
+              <label>
+                <span><strong>身体—轨迹失调</strong><small>身体朝向、步态与行进方向持续不协调，并且与参考视频不符。</small></span>
+                <select name="body_path_mismatch" data-shared-required>
+                  <option value="">请选择</option><option value="none">两侧均无明显问题</option><option value="a">仅 A</option><option value="b">仅 B</option><option value="both">A、B 都有</option>
+                </select>
+              </label>
+              <label>
+                <span><strong>动作时机失调</strong><small>起步、停步、迈步或可见动作发生时机与左侧参考明显不一致。</small></span>
+                <select name="reference_timing_mismatch" data-shared-required>
+                  <option value="">请选择</option><option value="none">两侧均无明显问题</option><option value="a">仅 A</option><option value="b">仅 B</option><option value="both">A、B 都有</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <fieldset class="question-block">
+            <legend>综合来看，哪一侧表现更好？</legend>
+            <div class="choice-row three">
+              <label class="choice"><input type="radio" name="shared_overall" value="a"><span>A 更好</span></label>
+              <label class="choice"><input type="radio" name="shared_overall" value="b"><span>B 更好</span></label>
+              <label class="choice"><input type="radio" name="shared_overall" value="tie"><span>无明显差异</span></label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div id="desync-questions" hidden>
+          <fieldset class="question-block">
+            <legend>你能否看出 A/B 的动作—轨迹同步存在明显差异？</legend>
+            <div class="choice-row two">
+              <label class="choice"><input type="radio" name="difference_visible" value="yes"><span>能看出来</span></label>
+              <label class="choice"><input type="radio" name="difference_visible" value="no"><span>无法看出</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="question-block">
+            <legend>哪一侧的动作—轨迹配合更自然？</legend>
+            <div class="choice-row three">
+              <label class="choice"><input type="radio" name="desync_natural" value="a"><span>A 更自然</span></label>
+              <label class="choice"><input type="radio" name="desync_natural" value="b"><span>B 更自然</span></label>
+              <label class="choice"><input type="radio" name="desync_natural" value="tie"><span>无法分辨</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="question-block">
+            <legend>你的主要判断依据 <span class="optional">可多选，可不选</span></legend>
+            <div class="check-grid">
+              <label><input type="checkbox" name="desync_evidence" value="foot_slide"><span>脚底滑动</span></label>
+              <label><input type="checkbox" name="desync_evidence" value="body_path"><span>身体—轨迹方向</span></label>
+              <label><input type="checkbox" name="desync_evidence" value="gait_speed"><span>步频—行进速度</span></label>
+              <label><input type="checkbox" name="desync_evidence" value="start_stop"><span>起步 / 停步时机</span></label>
+              <label><input type="checkbox" name="desync_evidence" value="other"><span>其他整体观感</span></label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="question-block notes-block">
+          <label class="field-label" for="notes">补充说明 <span class="optional">可选</span></label>
+          <textarea id="notes" name="notes" rows="3" maxlength="500" placeholder="只记录影响判断的重要现象"></textarea>
+        </div>
+
+        <p class="form-error" id="form-error" role="alert"></p>
+        <div class="form-actions">
+          <button class="button ghost" id="previous-item" type="button">上一段</button>
+          <button class="button primary" id="save-next" type="submit">保存并进入下一段</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="finish-card" id="finish-screen" hidden>
+      <span class="finish-icon" aria-hidden="true">✓</span>
+      <span class="eyebrow">REVIEW COMPLETE</span>
+      <h1>评分完成</h1>
+      <p>请下载 CSV 并发回实验组织者。JSON 是完整备份，建议同时保留。</p>
+      <div class="finish-summary" id="finish-summary"></div>
+      <div class="finish-actions">
+        <button class="button primary" id="export-csv" type="button">下载 CSV</button>
+        <button class="button secondary" id="export-json" type="button">下载 JSON 备份</button>
+        <button class="button ghost" id="return-review" type="button">返回检查评分</button>
+      </div>
+      <p class="privacy-note">导出文件不包含 A/B 的真实方法身份；实验组织者将在所有评分锁定后统一揭盲。</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
