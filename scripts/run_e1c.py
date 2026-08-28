@@ -210,8 +210,11 @@ def _floor_material(axis, root: np.ndarray, ground: float, radius: float, spacin
                 )
             )
             colors.append("#343a40" if (x_index + z_index) % 2 == 0 else "#454c55")
+    # A single opaque 3D polygon collection can be depth-sorted in front of the
+    # mannequin by mplot3d for oblique fixed cameras. Keep the material
+    # translucent so it remains a ground cue without hiding the motion.
     collection = Poly3DCollection(
-        faces, facecolors=colors, edgecolors="#616b76", linewidths=0.35, alpha=1.0
+        faces, facecolors=colors, edgecolors="#77818d", linewidths=0.45, alpha=0.34
     )
     axis.add_collection3d(collection)
 
@@ -222,6 +225,64 @@ def _path_direction(root_path: np.ndarray, frame_index: int) -> np.ndarray:
     direction = root_path[next_index] - root_path[previous_index]
     direction[1] = 0.0
     return direction
+
+
+def _fixed_world_camera(
+    root_path: np.ndarray,
+    valid: np.ndarray,
+    valid_data: np.ndarray,
+    body_height: float,
+    ground: float,
+) -> dict[str, float | tuple[float, float, float]]:
+    """Choose one world-fixed camera that contains the complete valid trajectory."""
+    horizontal = np.asarray(root_path[valid][:, [0, 2]], dtype=np.float64)
+    horizontal = horizontal[np.isfinite(horizontal).all(axis=1)]
+    if not len(horizontal):
+        horizontal = np.zeros((1, 2), dtype=np.float64)
+
+    centered = horizontal - np.mean(horizontal, axis=0, keepdims=True)
+    if len(horizontal) >= 2 and float(np.linalg.norm(centered)) > 1e-8:
+        _, _, principal_axes = np.linalg.svd(centered, full_matrices=False)
+        direction = principal_axes[0]
+        endpoint_direction = horizontal[-1] - horizontal[0]
+        if float(np.dot(direction, endpoint_direction)) < 0.0:
+            direction *= -1.0
+        path_azimuth = float(np.degrees(np.arctan2(direction[1], direction[0])))
+        azimuth = path_azimuth + 90.0
+    else:
+        azimuth = -65.0
+
+    padding = 0.62 * body_height
+    x_min = float(np.min(horizontal[:, 0]) - padding)
+    x_max = float(np.max(horizontal[:, 0]) + padding)
+    z_min = float(np.min(horizontal[:, 1]) - padding)
+    z_max = float(np.max(horizontal[:, 1]) + padding)
+    minimum_span = 1.55 * body_height
+    if x_max - x_min < minimum_span:
+        midpoint = 0.5 * (x_min + x_max)
+        x_min, x_max = midpoint - minimum_span / 2.0, midpoint + minimum_span / 2.0
+    if z_max - z_min < minimum_span:
+        midpoint = 0.5 * (z_min + z_max)
+        z_min, z_max = midpoint - minimum_span / 2.0, midpoint + minimum_span / 2.0
+
+    y_min = float(ground - 0.06 * body_height)
+    finite_y = valid_data[..., 1][np.isfinite(valid_data[..., 1])]
+    y_max = float(np.percentile(finite_y, 99) + 0.12 * body_height) if len(finite_y) else ground + body_height
+    y_max = max(y_max, ground + 1.12 * body_height)
+    spans = (x_max - x_min, z_max - z_min, y_max - y_min)
+    return {
+        "x_min": x_min,
+        "x_max": x_max,
+        "z_min": z_min,
+        "z_max": z_max,
+        "y_min": y_min,
+        "y_max": y_max,
+        "azimuth": azimuth,
+        "box_aspect": spans,
+        "floor_radius": 0.5 * max(spans[0], spans[1]),
+        "floor_x": 0.5 * (x_min + x_max),
+        "floor_z": 0.5 * (z_min + z_max),
+    }
 
 
 def _body_forward(joints: np.ndarray, path_direction: np.ndarray) -> np.ndarray:
@@ -334,8 +395,8 @@ def render_blind_pair_video(
     valid_data = np.concatenate([data_a[valid], data_b[valid]], axis=0)
     vertical_extent = np.ptp(valid_data[..., 1], axis=1) if len(valid_data) else np.asarray([1.0])
     body_height = max(float(np.median(vertical_extent)), 0.5)
-    radius = max(body_height * 0.68, 0.55)
     ground = float(np.percentile(valid_data[:, [3, 6], 1], 5)) if len(valid_data) else 0.0
+    camera = _fixed_world_camera(root_path, valid, valid_data, body_height, ground)
     frame_indices = np.flatnonzero(valid)[::max(int(stride), 1)]
     if not len(frame_indices):
         raise ValueError(f"{scene}: no valid frames to render")
@@ -358,8 +419,9 @@ def render_blind_pair_video(
     for label, axis in zip(("A", "B"), skeleton_axes):
         axis.set_title(label, color="#f8fafc")
         axis.set_facecolor("#1f2937")
-        axis.set_box_aspect((1.0, 1.0, 1.3))
-        axis.view_init(elev=17, azim=-65)
+        axis.set_proj_type("ortho")
+        axis.set_box_aspect(camera["box_aspect"])
+        axis.view_init(elev=19, azim=camera["azimuth"])
         axis.set_axis_off()
 
     path_axis.set_facecolor("#1f2937")
@@ -372,9 +434,8 @@ def render_blind_pair_video(
     path_axis.tick_params(labelsize=7, colors="#cbd5e1")
     for spine in path_axis.spines.values():
         spine.set_color("#64748b")
-    margin = max(body_height * 0.25, 0.1)
-    path_axis.set_xlim(float(root_path[:, 0].min() - margin), float(root_path[:, 0].max() + margin))
-    path_axis.set_ylim(float(root_path[:, 2].min() - margin), float(root_path[:, 2].max() + margin))
+    path_axis.set_xlim(camera["x_min"], camera["x_max"])
+    path_axis.set_ylim(camera["z_min"], camera["z_max"])
     time_artist = path_axis.text(
         0.99, 0.86, "", transform=path_axis.transAxes, ha="right", fontsize=9, color="#f8fafc"
     )
@@ -407,13 +468,32 @@ def render_blind_pair_video(
                     axis.cla()
                     axis.set_title("A" if axis is skeleton_axes[0] else "B", color="#f8fafc")
                     axis.set_facecolor("#1f2937")
-                    axis.set_box_aspect((1.0, 1.0, 1.3))
-                    axis.view_init(elev=17, azim=-65)
+                    axis.set_proj_type("ortho")
+                    axis.set_box_aspect(camera["box_aspect"])
+                    axis.view_init(elev=19, azim=camera["azimuth"])
                     axis.set_axis_off()
-                    axis.set_xlim(current_root[0] - radius, current_root[0] + radius)
-                    axis.set_ylim(current_root[2] - radius, current_root[2] + radius)
-                    axis.set_zlim(ground - 0.05 * body_height, ground + 1.18 * body_height)
-                    _floor_material(axis, current_root, ground, radius, body_height * 0.28)
+                    axis.set_xlim(camera["x_min"], camera["x_max"])
+                    axis.set_ylim(camera["z_min"], camera["z_max"])
+                    axis.set_zlim(camera["y_min"], camera["y_max"])
+                    floor_center = np.asarray([camera["floor_x"], ground, camera["floor_z"]])
+                    floor_spacing = max(
+                        body_height * 0.28,
+                        2.0 * float(camera["floor_radius"]) / 14.0,
+                    )
+                    _floor_material(
+                        axis, floor_center, ground - 0.025 * body_height,
+                        float(camera["floor_radius"]), floor_spacing,
+                    )
+                    path_height = ground + 0.009 * body_height
+                    axis.plot(
+                        root_path[:, 0], root_path[:, 2], np.full(len(root_path), path_height),
+                        color="#94a3b8", linewidth=1.5, alpha=0.85,
+                    )
+                    axis.plot(
+                        root_path[: frame_index + 1, 0], root_path[: frame_index + 1, 2],
+                        np.full(frame_index + 1, path_height + 0.003 * body_height),
+                        color="#22d3ee", linewidth=2.4, alpha=0.95,
+                    )
                     _render_mannequin(
                         axis, motion[frame_index], body_height, ground, direction,
                         contacts_by_condition[method][frame_index],

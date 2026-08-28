@@ -10,7 +10,9 @@ E1 分为两层，避免把两类方法不共同定义的能力硬凑成一个�
 
 解释边界：没有 3D ground truth 时，较低 jerk 或骨长漂移只能支持“更稳定”，不能支持“姿态更准确”；social cue 保真度必须结合匿名人工评分。E1 允许出现 MotionBERT 在局部动作稳定性更好、但 GEM 因原生 SMPL 与动作—root trajectory 联合输出更适合 scene-ready MotionPool 的结论。
 
-E1c 将动作—轨迹耦合单独评估。主条件为 GEM 原生 global common-17、经过一次整段旋转/尺度适配后放置在相同 GEM root trajectory 上的 MotionBERT，以及只将 GEM root-relative articulation 错开 15 帧的负对照。负对照不循环、不补帧，只裁剪共同区间；另以 ±8、±15、±30 帧检查剂量响应。人工材料必须使用相同参考视频、低面数体积人偶、左右肢体配色、世界固定棋盘地面、投影、相机和轨迹视图；推断触地脚以同色圆环提示。MotionBERT shared-root 是外部轨迹组装控制，不得写成 MotionBERT 原生轨迹输出；common-17 脚接触指标和触地圆环是诊断，不是真值物理接触误差。
+E1c 将动作—轨迹耦合单独评估。主条件为 GEM 原生 global common-17、经过一次整段旋转/尺度适配后放置在相同 GEM root trajectory 上的 MotionBERT，以及只将 GEM root-relative articulation 错开 15 帧的负对照。负对照不循环、不补帧，只裁剪共同区间；另以 ±8、±15、±30 帧检查剂量响应。人工材料必须使用相同参考视频、低面数体积人偶、左右肢体配色、世界固定棋盘地面、投影和轨迹视图；每段片段依据完整共享轨迹只确定一次正交相机范围和方位，播放期间不跟随人物、不平移、不缩放。推断触地脚以同色圆环提示。MotionBERT shared-root 是外部轨迹组装控制，不得写成 MotionBERT 原生轨迹输出；common-17 脚接触指标和触地圆环是诊断，不是真值物理接触误差。
+
+GEM 与 MotionBERT 在人工材料中都先映射为完全相同的 common-17 显示拓扑，因此不会因可见头部关节数量不同而直接偏向某一种方法。但 common-17 的头部只有 neck/head center，球形头部也没有朝向标记；它只能支持头部整体位移和躯干动作的粗粒度观察，不能公平评价 head yaw、视线方向以及 LOS/FTT 的精细朝向。此类 cue 在当前 E1c 盲评中标为不可评价，若后续需要研究，应另建两者共同支持的头部朝向表示或单列 native-capability 实验。
 
 ## E3：DROID 与 MegaSAM 的 ego-motion 评估
 
