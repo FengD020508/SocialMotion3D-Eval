@@ -95,6 +95,12 @@ def prepare_clip(
     if not overwrite and video_output.is_file() and meta_output.is_file() and arrays_output.is_file():
         return json.loads(meta_output.read_text(encoding="utf-8"))
 
+    boxes_are_source_frames = False
+    if not annotation_path.is_file() and clip.get("annotation"):
+        relative = Path(str(clip["annotation"]))
+        candidates = [annotation_root / relative, annotation_root.parent / relative]
+        annotation_path = next((path for path in candidates if path.is_file()), annotation_path)
+        boxes_are_source_frames = annotation_path.is_file()
     if annotation_path.is_file():
         boxes = target_boxes(annotation_path, str(clip["pedestrian_id"]))
         bbox_source = str(annotation_path)
@@ -110,6 +116,8 @@ def prepare_clip(
     else:
         raise FileNotFoundError(annotation_path)
     clip_start, _ = map(int, clip["clip_frames"])
+    if boxes_are_source_frames:
+        boxes = {int(frame) - clip_start: box for frame, box in boxes.items()}
     track_start, track_end = map(int, clip["track_frames"])
     local_start = max(track_start - clip_start, min(boxes))
     local_end = min(track_end - clip_start, max(boxes))

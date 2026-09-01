@@ -54,10 +54,18 @@ if ($OverwriteCrops) {
 & conda @cropArgs
 if ($LASTEXITCODE -ne 0) { throw "Target crop preparation failed." }
 
-$sceneDirs = Get-ChildItem -LiteralPath $OutputRoot -Directory | Where-Object { $_.Name -match '^\d{2}_' } | Sort-Object Name
+$manifestObject = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
+$sceneDirs = foreach ($entry in $manifestObject.clips) {
+    $sceneName = [IO.Path]::GetFileNameWithoutExtension([string]$entry.output)
+    $candidate = Join-Path $OutputRoot $sceneName
+    if (Test-Path -LiteralPath $candidate -PathType Container) {
+        Get-Item -LiteralPath $candidate
+    }
+}
+$sceneDirs = $sceneDirs | Sort-Object Name
 if ($Clips.Count -gt 0) {
     $requested = @{}; foreach ($clip in $Clips) { $requested[$clip] = $true }
-    $sceneDirs = $sceneDirs | Where-Object { $requested[$_.Name.Substring(0, 2)] }
+    $sceneDirs = $sceneDirs | Where-Object { $requested[$_.Name.Split('_', 2)[0]] }
 }
 
 $batch = @()
