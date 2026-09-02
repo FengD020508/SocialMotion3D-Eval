@@ -1,0 +1,24 @@
+diff --git a/camera_tracking_scripts/test_demo.py b/camera_tracking_scripts/test_demo.py
+index ba59617..d11f3cb 100644
+--- a/camera_tracking_scripts/test_demo.py
++++ b/camera_tracking_scripts/test_demo.py
+@@ -165,6 +165,11 @@ if __name__ == "__main__":
+   parser.add_argument("--buffer", type=int, default=1024)
+   parser.add_argument("--image_size", default=[240, 320])
+   parser.add_argument("--disable_vis", action="store_true")
++  parser.add_argument(
++      "--disable_focal_optimization",
++      action="store_true",
++      help="hold the positive UniDepth FoV focal initialization fixed",
++  )
+ 
+   parser.add_argument("--beta", type=float, default=0.3)
+   parser.add_argument(
+@@ -330,6 +335,6 @@ if __name__ == "__main__":
+           K=K,
+       ),
+-      _opt_intr=True,
++      _opt_intr=not args.disable_focal_optimization,
+       full_ba=True,
+       scene_name=scene_name,
+   )

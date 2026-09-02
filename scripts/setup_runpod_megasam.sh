@@ -13,6 +13,16 @@ if [[ ! -d "${mega_root}/.git" ]]; then
   exit 1
 fi
 
+patch_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/patches/mega-sam-disable-focal-optimization.patch"
+if git -C "${mega_root}" apply --reverse --check "${patch_file}" >/dev/null 2>&1; then
+  echo "MegaSAM focal-fallback patch is already applied"
+elif git -C "${mega_root}" apply --check "${patch_file}"; then
+  git -C "${mega_root}" apply "${patch_file}"
+else
+  echo "MegaSAM checkout is incompatible with ${patch_file}" >&2
+  exit 1
+fi
+
 if [[ ! -x "${conda_bin}" ]]; then
   installer="${cache_root}/Miniforge3-Linux-x86_64.sh"
   mkdir -p "${cache_root}"
