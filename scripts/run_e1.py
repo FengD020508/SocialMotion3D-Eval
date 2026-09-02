@@ -47,6 +47,17 @@ def cue_label(clip: dict) -> str:
     return "+".join(dict.fromkeys(pieces)) or "unspecified"
 
 
+def resolve_event_artifact(root: Path, scene: str, clip_id: str, relative_path: str) -> Path:
+    """Resolve artifacts stored by either descriptive scene name or compact event ID."""
+    candidates = [root / scene / relative_path]
+    if clip_id and clip_id != scene:
+        candidates.append(root / clip_id / relative_path)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
 def render_blind_video(
     output: Path,
     scene: str,
@@ -128,9 +139,10 @@ def main() -> None:
     rating_rows = []
     for clip in manifest["clips"]:
         scene = Path(clip["output"]).stem
-        mb_path = motionbert_root / scene / "motionbert_lifting" / "X3D.npy"
-        mb_meta_path = motionbert_root / scene / "crop_meta.npz"
-        gem_path = gem_root / scene / "gem_common17.npz"
+        clip_id = str(clip.get("clip_id", ""))
+        mb_path = resolve_event_artifact(motionbert_root, scene, clip_id, "motionbert_lifting/X3D.npy")
+        mb_meta_path = resolve_event_artifact(motionbert_root, scene, clip_id, "crop_meta.npz")
+        gem_path = resolve_event_artifact(gem_root, scene, clip_id, "gem_common17.npz")
         if not mb_path.is_file() or not mb_meta_path.is_file() or not gem_path.is_file():
             raise FileNotFoundError(f"missing E1 input for {scene}: {mb_path}, {mb_meta_path}, {gem_path}")
         motionbert = np.load(mb_path)
