@@ -38,7 +38,27 @@ def _find_video(inputs: Path, output_name: str) -> Path:
     return path
 
 
-def _slice_camera(source: Path, output: Path, source_frames: np.ndarray) -> None:
+def _rebase_camera_trajectory(T_c2w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Express a sliced camera trajectory in its first camera frame."""
+    T = np.asarray(T_c2w, dtype=np.float64)
+    if T.ndim != 3 or T.shape[1:] != (4, 4) or len(T) == 0:
+        raise ValueError(f"invalid T_c2w shape: {T.shape}")
+    if not np.isfinite(T).all():
+        raise ValueError("T_c2w contains non-finite values")
+    anchor = np.linalg.inv(T[0])
+    rebased = np.einsum("ij,njk->nik", anchor, T).astype(np.float32)
+    rebased[0] = np.eye(4, dtype=np.float32)
+    inverse = np.linalg.inv(rebased).astype(np.float32)
+    return rebased, inverse
+
+
+def _slice_camera(
+    source: Path,
+    output: Path,
+    source_frames: np.ndarray,
+    save_camera_npz,
+    validate_camera,
+) -> None:
     with np.load(source, allow_pickle=False) as camera:
         if "frame_numbers" not in camera.files:
             raise ValueError(f"{source}: missing frame_numbers")
@@ -48,15 +68,38 @@ def _slice_camera(source: Path, output: Path, source_frames: np.ndarray) -> None
         if missing:
             raise ValueError(f"{source}: missing {len(missing)} target frames; first={missing[0]}")
         indices = np.asarray([lookup[int(frame)] for frame in source_frames], dtype=np.int64)
-        arrays = {}
-        for key in camera.files:
-            value = camera[key]
-            arrays[key] = value[indices] if value.ndim > 0 and len(value) == len(available) else value
-    if not np.array_equal(np.asarray(arrays["frame_numbers"], dtype=np.int64), source_frames):
-        raise RuntimeError("sliced camera/source frame mismatch")
+        T_c2w, T_w2c = _rebase_camera_trajectory(camera["T_c2w"][indices])
+        fps = float(camera["fps"])
+        metadata = json.loads(str(camera["metadata_json"].item()))
+        metadata.update(
+            {
+                "normalization_origin": "event_first_frame",
+                "normalization_source_frame": int(source_frames[0]),
+                "source_scene_camera": str(source),
+            }
+        )
+        intrinsics = camera["intrinsics"]
+        timestamps = camera["timestamps"][indices]
+        confidence = camera["tracking_confidence"][indices]
+        failed = camera["tracking_failed"][indices]
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp.npz")
-    np.savez_compressed(temporary, **arrays)
+    save_camera_npz(
+        temporary,
+        T_c2w,
+        T_w2c,
+        intrinsics,
+        source_frames,
+        timestamps,
+        confidence,
+        failed,
+        fps,
+        metadata,
+    )
+    validation = validate_camera(T_c2w, T_w2c)
+    if not validation["passed"]:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(f"rebased event camera failed validation: {validation}")
     temporary.replace(output)
 
 
@@ -83,6 +126,7 @@ def main() -> None:
         save_target_npz,
         write_target_video_and_overlay,
     )
+    from idd_ped.camera_geometry import save_camera_npz, validate_camera  # type: ignore
 
     event_manifest = json.loads(
         (args.event_inputs / "selection_manifest.json").read_text(encoding="utf-8")
@@ -134,7 +178,13 @@ def main() -> None:
                     args.camera_root / method / scene["clip_id"] / "camera_trajectory.npz"
                 )
                 target_cameras[method] = output_dir / f"camera_{method}.npz"
-                _slice_camera(scene_camera, target_cameras[method], source_frames)
+                _slice_camera(
+                    scene_camera,
+                    target_cameras[method],
+                    source_frames,
+                    save_camera_npz,
+                    validate_camera,
+                )
             target_camera = target_cameras[args.camera_method]
 
             demo_root = output_dir / "_genmo"
