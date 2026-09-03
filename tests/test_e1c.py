@@ -4,6 +4,7 @@ import numpy as np
 
 from socialmotion3d_eval.e1 import BONES
 from socialmotion3d_eval.e1c import (
+    canonicalize_world_up,
     construct_shared_root_variants,
     coupling_metrics,
     desynchronize_articulation,
@@ -37,6 +38,22 @@ def synthetic_skeleton(frames: int = 40) -> np.ndarray:
 
 
 class E1CConstructionTests(unittest.TestCase):
+    def test_canonicalizes_upside_down_world_gauge_with_proper_rotation(self):
+        upright = synthetic_skeleton(12)
+        upside_down = upright.copy()
+        upside_down[..., 1] *= -1.0
+        upside_down[..., 2] *= -1.0
+        corrected, changed = canonicalize_world_up(
+            upside_down, np.ones(len(upside_down), dtype=bool)
+        )
+        self.assertTrue(changed)
+        self.assertGreater(float(np.median(corrected[:, 10, 1] - corrected[:, 0, 1])), 0.0)
+        self.assertLess(float(np.median(corrected[:, [3, 6], 1] - corrected[:, None, 0, 1])), 0.0)
+        np.testing.assert_allclose(
+            np.linalg.norm(corrected[:, 10] - corrected[:, 0], axis=-1),
+            np.linalg.norm(upside_down[:, 10] - upside_down[:, 0], axis=-1),
+        )
+
     def test_recovers_proper_camera_transform_from_paired_joints(self):
         incam = synthetic_skeleton(12)
         angle = np.deg2rad(63.0)

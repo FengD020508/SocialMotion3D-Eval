@@ -39,6 +39,36 @@ class RecoveredCamera:
     valid: np.ndarray
 
 
+def canonicalize_world_up(motion: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Rotate an upside-down common-17 world sequence into the y-up gauge.
+
+    Global monocular reconstruction has an arbitrary world-frame gauge. Most
+    exported clips use y-up, but a valid solution may differ by 180 degrees
+    around the x axis. Detect that case from the median head and ankle
+    locations relative to the pelvis, then apply one sequence-level proper
+    rotation. Bone lengths, articulation, and trajectory coupling stay intact.
+    """
+    motion = np.asarray(motion, dtype=np.float64)
+    valid = np.asarray(valid, dtype=bool)
+    if motion.ndim != 3 or motion.shape[1:] != (17, 3) or len(valid) != len(motion):
+        raise ValueError("motion must be [T,17,3] and valid must be [T]")
+    usable = valid & np.isfinite(motion).all(axis=(1, 2))
+    if not usable.any():
+        return motion.copy(), False
+    selected = motion[usable]
+    head_delta = float(np.median(selected[:, 10, 1] - selected[:, 0, 1]))
+    ankle_delta = float(np.median(selected[:, [3, 6], 1] - selected[:, None, 0, 1]))
+    if head_delta >= 0.0 or ankle_delta <= 0.0:
+        return motion.copy(), False
+    first_valid = int(np.flatnonzero(usable)[0])
+    pivot = motion[first_valid, 0].copy()
+    corrected = motion - pivot
+    corrected[..., 1] *= -1.0
+    corrected[..., 2] *= -1.0
+    corrected += pivot
+    return corrected, True
+
+
 def recover_camera_from_joint_pairs(
     joints_incam: np.ndarray,
     joints_global: np.ndarray,

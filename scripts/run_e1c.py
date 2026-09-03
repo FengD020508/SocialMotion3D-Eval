@@ -16,6 +16,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from socialmotion3d_eval.e1 import BONES, align_by_local_frame
 from socialmotion3d_eval.e1c import (
+    canonicalize_world_up,
     construct_shared_root_variants,
     coupling_metrics,
     desynchronize_articulation,
@@ -617,9 +618,10 @@ def main() -> None:
             fps = float(meta["fps"])
         with np.load(gem_path, allow_pickle=False) as gem_data:
             gem_incam = np.asarray(gem_data["joints_incam"], dtype=np.float64)
-            gem_global = np.asarray(gem_data["joints_global"], dtype=np.float64)
+            gem_global_raw = np.asarray(gem_data["joints_global"], dtype=np.float64)
             gem_frames = np.asarray(gem_data["local_frames"], dtype=np.int64)
             gem_valid = np.asarray(gem_data["valid_mask"], dtype=bool)
+        gem_global, world_up_corrected = canonicalize_world_up(gem_global_raw, gem_valid)
 
         aligned = align_by_local_frame(
             motionbert, motionbert_frames, gem_global, gem_frames, gem_valid
@@ -773,6 +775,7 @@ def main() -> None:
                     float(np.nanmedian(recovered_camera.fit_rmse[recovered_camera.valid]))
                     if recovered_camera.valid.any() else None
                 ),
+                "world_up_canonicalization": "rotate_x_180" if world_up_corrected else "unchanged",
             }
         )
         print(f"E1c prepared {scene}: {int(common_valid.sum())}/{len(common_valid)} valid")

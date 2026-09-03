@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  const SCHEMA_VERSION = "e1c-e1d-human-review-4.0";
-  const STORAGE_KEY = "socialmotion3d-e1-human-review-v4";
+  const SCHEMA_VERSION = "e1c-e1d-human-review-5.0";
+  const STORAGE_KEY = "socialmotion3d-e1-human-review-v5";
   const LANGUAGE_KEY = "socialmotion3d-e1c-language";
   const CLIPS = [
     "01_gp_set_0003_vid_0004_gp_3467_Other_blind.mp4",
@@ -84,8 +84,8 @@
       desyncInstruction: "请把 A/B 视为两种匿名动作—轨迹组合，只判断哪一侧的整体配合更自然。",
       desyncLegend: "可以留意步态与位移、支撑脚与身体推进、起步和停步是否协调；不需要先判断两侧是否存在差异。",
       nativeTitle: "原生端到端输出比较",
-      nativeInstruction: "本部分保留两套流程实际交付的完整表示，不再把它们统一为相同骨架。请评价系统级信息完整性与使用价值。",
-      nativeLegend: "表示形式差异是本部分的研究对象之一，A/B身份可能可以从外观推测。请勿只按画面精美程度判断，而应结合左侧参考、轨迹、朝向和后续加工需求。",
+      nativeInstruction: "本部分保留两套流程实际交付的完整表示，不再把它们统一为相同骨架。请评价完整表示下的交互保真度与朝向可读性。",
+      nativeLegend: "表示形式差异是本部分的研究对象之一，A/B身份可能可以从外观推测。请勿只按画面精美程度判断，而应结合左侧参考中的动作与朝向。",
       videoFallback: "当前浏览器无法播放该视频，请改用最新版 Edge 或 Chrome。",
       videoLeft: "左：原始参考视频",
       videoAB: "中 / 右：匿名结果 A / B",
@@ -100,8 +100,6 @@
       nativeInteractionHelp: "关注动作类型、方向与时机；不要仅因网格比骨架更有体积感就判定其动作更好。",
       nativeOrientationQuestion: "2. 哪一侧更容易判断身体与头部的朝向？",
       nativeOrientationHelp: "评价朝向信息是否可读，不要求推断精确视线落点。",
-      nativeUtilityQuestion: "3. 若不额外人工补轨迹或重新绑定人体，哪一侧更适合直接用于三维交互场景或 Motion Pool？",
-      nativeUtilityHelp: "综合动作、全局位移、人体表示和后续加工需求；这是完整系统输出评价，不是纯姿态精度比较。",
       aBetter: "A 更好",
       bBetter: "B 更好",
       aMoreNatural: "A 更自然",
@@ -110,10 +108,6 @@
       bClearer: "B 更清楚",
       similarClear: "一致且都清楚",
       bothUnclear: "两侧都不清楚",
-      aMoreUseful: "A 更适用",
-      bMoreUseful: "B 更适用",
-      similarUseful: "两侧同样适用",
-      neitherUseful: "两侧都不适用",
       similarAcceptable: "一致且都可接受",
       similarPreserved: "一致且都保留",
       bothPoor: "两侧都差",
@@ -174,7 +168,6 @@
       nativeSplashCopy: "这一小节有5段试评素材。两种流程保持各自原生交付形式，因此表示能力并不对等；本节有意测量这种端到端差异，而不是再次比较统一骨架上的纯动作质量。",
       nativeFocus1: "对照左侧参考，交互动作的类型、方向和时机是否仍然清楚。",
       nativeFocus2: "身体与头部朝向是否可读，但不要把画面精美程度当作动作正确性。",
-      nativeFocus3: "在不人工补轨迹、不重新绑定人体的前提下，哪一侧更接近可直接进入三维场景或 Motion Pool 的数据。",
       beginPartOne: "开始第一部分",
       beginPartTwo: "开始第二部分",
       beginPartThree: "开始第三部分",
@@ -190,8 +183,7 @@
       errorDesyncFailure: "选择“两侧都不自然”时，请至少勾选一个失败原因。",
       errorDesyncNotEvaluable: "请选择动作—轨迹组合无法评价的素材原因。",
       errorNativeInteraction: "请选择哪一侧更好地表达了可见交互。",
-      errorNativeOrientation: "请选择哪一侧的身体与头部朝向更清楚。",
-      errorNativeUtility: "请选择哪一侧更适合直接用于三维场景或 Motion Pool。"
+      errorNativeOrientation: "请选择哪一侧的身体与头部朝向更清楚。"
     },
     en: {
       pageTitle: "SocialMotion3D · E1c/E1d Human Review",
@@ -227,8 +219,8 @@
       desyncInstruction: "Treat A and B as two anonymous motion–trajectory combinations and judge which one is more natural overall.",
       desyncLegend: "You may consider gait versus displacement, support-foot behavior, body progression, and start/stop coordination. You do not need to first report whether a difference is visible.",
       nativeTitle: "Native end-to-end output comparison",
-      nativeInstruction: "This section preserves the complete representation actually delivered by each pipeline instead of converting both to the same skeleton. Assess system-level information and practical utility.",
-      nativeLegend: "Representation differences are part of the question, so the method family may be inferable from appearance. Do not judge visual polish alone; use the reference, trajectory, orientation, and downstream work required.",
+      nativeInstruction: "This section preserves the complete representation actually delivered by each pipeline instead of converting both to the same skeleton. Assess interaction fidelity and orientation readability in the complete representations.",
+      nativeLegend: "Representation differences are part of the question, so the method family may be inferable from appearance. Do not judge visual polish alone; use the motion and orientation visible in the reference.",
       videoFallback: "This browser cannot play the video. Please use a recent version of Edge or Chrome.",
       videoLeft: "Left: reference video",
       videoAB: "Middle / right: anonymous results A / B",
@@ -243,8 +235,6 @@
       nativeInteractionHelp: "Consider action type, direction, and timing. Do not rate a surface as better merely because it has more visual volume than a skeleton.",
       nativeOrientationQuestion: "2. Which side makes body and head orientation easier to interpret?",
       nativeOrientationHelp: "Assess whether orientation is readable; do not infer an exact gaze target.",
-      nativeUtilityQuestion: "3. Without manually adding a trajectory or re-rigging a body, which side is more directly useful for a 3D interaction scene or Motion Pool?",
-      nativeUtilityHelp: "Consider motion, global displacement, body representation, and downstream work. This is a complete-system assessment, not a pure pose-accuracy comparison.",
       aBetter: "A is better",
       bBetter: "B is better",
       aMoreNatural: "A is more natural",
@@ -253,10 +243,6 @@
       bClearer: "B is clearer",
       similarClear: "Similar and both clear",
       bothUnclear: "Both are unclear",
-      aMoreUseful: "A is more useful",
-      bMoreUseful: "B is more useful",
-      similarUseful: "Both are equally useful",
-      neitherUseful: "Neither is useful",
       similarAcceptable: "Similar and both acceptable",
       similarPreserved: "Similar and both preserve it",
       bothPoor: "Both are poor",
@@ -317,7 +303,6 @@
       nativeSplashCopy: "This short section contains five pilot clips. Each pipeline keeps its native delivered representation, so representational capacity is intentionally not equal. This section measures that end-to-end difference rather than repeating a pure motion comparison on a common skeleton.",
       nativeFocus1: "Against the reference, whether the interaction type, direction, and timing remain clear.",
       nativeFocus2: "Whether body and head orientation are readable, without treating visual polish as motion correctness.",
-      nativeFocus3: "Without manual trajectory annotation or body re-rigging, which output is closer to usable 3D-scene or Motion-Pool data.",
       beginPartOne: "Begin Part I",
       beginPartTwo: "Begin Part II",
       beginPartThree: "Begin Part III",
@@ -333,8 +318,7 @@
       errorDesyncFailure: "When both are unnatural, select at least one failure reason.",
       errorDesyncNotEvaluable: "Select the material limitation that prevents judging motion–trajectory coherence.",
       errorNativeInteraction: "Choose which side better expresses the visible interaction.",
-      errorNativeOrientation: "Choose which side makes body and head orientation clearer.",
-      errorNativeUtility: "Choose which side is more directly useful for a 3D scene or Motion Pool."
+      errorNativeOrientation: "Choose which side makes body and head orientation clearer."
     }
   };
 
@@ -501,7 +485,7 @@
     const focusKeys = {
       shared: ["sharedFocus1", "sharedFocus2", "sharedFocus3"],
       desync: ["desyncFocus1", "desyncFocus2", "desyncFocus3"],
-      native: ["nativeFocus1", "nativeFocus2", "nativeFocus3"]
+      native: ["nativeFocus1", "nativeFocus2"]
     }[section];
     elements["section-intro-number"].textContent = sectionNumber;
     elements["section-intro-eyebrow"].textContent = partName;
@@ -611,7 +595,6 @@
     } else {
       setSelected("native_interaction", answer.nativeInteraction || "");
       setSelected("native_orientation", answer.nativeOrientation || "");
-      setSelected("native_utility", answer.nativeUtility || "");
     }
     elements.notes.value = answer.notes || "";
     updateConditionals();
@@ -638,7 +621,6 @@
     }
     if (!selected("native_interaction")) return t("errorNativeInteraction");
     if (!selected("native_orientation")) return t("errorNativeOrientation");
-    if (!selected("native_utility")) return t("errorNativeUtility");
     return "";
   }
 
@@ -677,8 +659,7 @@
     return {
       ...base,
       nativeInteraction: selected("native_interaction"),
-      nativeOrientation: selected("native_orientation"),
-      nativeUtility: selected("native_utility")
+      nativeOrientation: selected("native_orientation")
     };
   }
 
@@ -707,7 +688,6 @@
         motion_trajectory_not_evaluable_reason: answer.desyncNotEvaluableReason || "",
         native_interaction_fidelity_choice: answer.nativeInteraction || "",
         native_orientation_readability_choice: answer.nativeOrientation || "",
-        native_scene_utility_choice: answer.nativeUtility || "",
         interface_language: answer.interfaceLanguage || "",
         notes: answer.notes || "",
         rated_at: answer.ratedAt
