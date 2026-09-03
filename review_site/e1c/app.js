@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  const SCHEMA_VERSION = "e1c-e1d-human-review-5.0";
-  const STORAGE_KEY = "socialmotion3d-e1-human-review-v5";
+  const SCHEMA_VERSION = "e1c-e1d-human-review-6.0";
+  const STORAGE_KEY = "socialmotion3d-e1-human-review-v6";
   const LANGUAGE_KEY = "socialmotion3d-e1c-language";
   const CLIPS = [
     "01_gp_set_0003_vid_0004_gp_3467_Other_blind.mp4",
@@ -30,7 +30,6 @@
     "23_gp_set_0005_vid_0005_gp_5751_OCCLUSION_NIGHT_night_high_blind.mp4",
     "24_gp_set_0003_vid_0004_gp_3394_WTT_LOS_day_medium_blind.mp4",
     "26_gp_set_0008_vid_0005_gp_6137_HG_NIGHT_night_high_blind.mp4",
-    "39_gp_set_0001_vid_0003_gp_250_HG_NIGHT_CROSS_unknown_medium_blind.mp4",
     "40_gp_set_0002_vid_0005_gp_3759_HG_LANE_CROSS_unknown_high_blind.mp4",
     "42_gp_set_0005_vid_0002_gp_4199_HG_LONG_LOS_day_low_blind.mp4"
   ];
