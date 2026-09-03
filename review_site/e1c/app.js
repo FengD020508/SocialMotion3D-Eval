@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  const SCHEMA_VERSION = "e1c-human-review-3.0";
-  const STORAGE_KEY = "socialmotion3d-e1c-human-review-v3";
+  const SCHEMA_VERSION = "e1c-e1d-human-review-4.0";
+  const STORAGE_KEY = "socialmotion3d-e1-human-review-v4";
   const LANGUAGE_KEY = "socialmotion3d-e1c-language";
   const CLIPS = [
     "01_gp_set_0003_vid_0004_gp_3467_Other_blind.mp4",
@@ -35,23 +35,33 @@
     "42_gp_set_0005_vid_0002_gp_4199_HG_LONG_LOS_day_low_blind.mp4"
   ];
 
+  const NATIVE_CLIPS = [
+    "01_gp_set_0003_vid_0004_gp_3467_Other_blind.mp4",
+    "02_gp_set_0003_vid_0005_gp_6979_HG_blind.mp4",
+    "03_gp_set_0001_vid_0005_gp_936_HG_blind.mp4",
+    "04_gp_set_0003_vid_0004_gp_2883_HG_blind.mp4",
+    "05_gp_set_0008_vid_0001_gp_5803_HG_blind.mp4"
+  ];
+
   const ITEMS = [
     ...CLIPS.map((file, index) => ({ id: `shared-${index + 1}`, type: "shared", file, sectionIndex: index })),
-    ...CLIPS.map((file, index) => ({ id: `desync-${index + 1}`, type: "desync", file, sectionIndex: index }))
+    ...CLIPS.map((file, index) => ({ id: `desync-${index + 1}`, type: "desync", file, sectionIndex: index })),
+    ...NATIVE_CLIPS.map((file, index) => ({ id: `native-${index + 1}`, type: "native", file, sectionIndex: index }))
   ];
 
   const COPY = {
     zh: {
-      pageTitle: "SocialMotion3D · E1c 人工盲评",
-      brandSubtitle: "E1c 人工盲评",
+      pageTitle: "SocialMotion3D · E1c/E1d 人工评审",
+      brandSubtitle: "E1c/E1d 人工评审",
       notSaved: "尚未保存",
       autosaved: "已自动保存",
       exportReminder: "请及时导出备份",
       exportCurrent: "导出当前结果",
-      heroTitle: "判断动作是否自然地<br>发生在这条轨迹上",
-      heroCopy: "全程约 25–35 分钟。结果只保存在当前浏览器；完成后请导出 CSV，并发回实验组织者。",
+      heroTitle: "从受控动作比较到<br>完整系统输出评估",
+      heroCopy: "全程约 30–40 分钟。结果只保存在当前浏览器；完成后请导出 CSV，并发回实验组织者。",
       motionComparison: "动作方法比较",
       coherenceCheck: "动作—轨迹协调检查",
+      nativeOutputComparison: "原生输出试评",
       totalVideos: "总视频数",
       beforeStart: "开始前",
       introRule1: "请独立评分，不与其他评审讨论，也不要寻找或打开 <code>blind_key.json</code>。",
@@ -65,6 +75,7 @@
       focusOn: "评价时请关注",
       partOne: "第一部分",
       partTwo: "第二部分",
+      partThree: "第三部分 · E1d Pilot",
       sampleCount: "样本 {current} / {total}",
       sharedTitle: "共享轨迹上的动作比较",
       sharedInstruction: "A/B 使用完全相同的根轨迹。请分别判断动作本身的质量，以及对左侧参考中可见交互的保留程度。",
@@ -72,6 +83,9 @@
       desyncTitle: "动作—轨迹协调性比较",
       desyncInstruction: "请把 A/B 视为两种匿名动作—轨迹组合，只判断哪一侧的整体配合更自然。",
       desyncLegend: "可以留意步态与位移、支撑脚与身体推进、起步和停步是否协调；不需要先判断两侧是否存在差异。",
+      nativeTitle: "原生端到端输出比较",
+      nativeInstruction: "本部分保留两套流程实际交付的完整表示，不再把它们统一为相同骨架。请评价系统级信息完整性与使用价值。",
+      nativeLegend: "表示形式差异是本部分的研究对象之一，A/B身份可能可以从外观推测。请勿只按画面精美程度判断，而应结合左侧参考、轨迹、朝向和后续加工需求。",
       videoFallback: "当前浏览器无法播放该视频，请改用最新版 Edge 或 Chrome。",
       videoLeft: "左：原始参考视频",
       videoAB: "中 / 右：匿名结果 A / B",
@@ -82,10 +96,24 @@
       interactionHelp: "判断挥手、观察、起步或避让等可见动作及其发生时机；不是判断动作幅度越大越好。",
       desyncQuestion: "哪一侧的动作—轨迹组合整体更自然？",
       desyncHelp: "直接比较整体协调性即可；如果两侧都自然、都不自然或素材不足，请使用相应选项。",
+      nativeInteractionQuestion: "1. 与左侧参考相比，哪一侧更清楚、忠实地表达了可见的交互动作？",
+      nativeInteractionHelp: "关注动作类型、方向与时机；不要仅因网格比骨架更有体积感就判定其动作更好。",
+      nativeOrientationQuestion: "2. 哪一侧更容易判断身体与头部的朝向？",
+      nativeOrientationHelp: "评价朝向信息是否可读，不要求推断精确视线落点。",
+      nativeUtilityQuestion: "3. 若不额外人工补轨迹或重新绑定人体，哪一侧更适合直接用于三维交互场景或 Motion Pool？",
+      nativeUtilityHelp: "综合动作、全局位移、人体表示和后续加工需求；这是完整系统输出评价，不是纯姿态精度比较。",
       aBetter: "A 更好",
       bBetter: "B 更好",
       aMoreNatural: "A 更自然",
       bMoreNatural: "B 更自然",
+      aClearer: "A 更清楚",
+      bClearer: "B 更清楚",
+      similarClear: "一致且都清楚",
+      bothUnclear: "两侧都不清楚",
+      aMoreUseful: "A 更适用",
+      bMoreUseful: "B 更适用",
+      similarUseful: "两侧同样适用",
+      neitherUseful: "两侧都不适用",
       similarAcceptable: "一致且都可接受",
       similarPreserved: "一致且都保留",
       bothPoor: "两侧都差",
@@ -142,8 +170,14 @@
       desyncFocus1: "步态节奏是否与身体位移相符。",
       desyncFocus2: "支撑脚、身体推进、起步与停步是否协调。",
       desyncFocus3: "两侧相近时可选“一致且都可接受”；素材不足时选“无法评价”。",
+      nativeSplashTitle: "完整原生输出：系统级试评",
+      nativeSplashCopy: "这一小节有5段试评素材。两种流程保持各自原生交付形式，因此表示能力并不对等；本节有意测量这种端到端差异，而不是再次比较统一骨架上的纯动作质量。",
+      nativeFocus1: "对照左侧参考，交互动作的类型、方向和时机是否仍然清楚。",
+      nativeFocus2: "身体与头部朝向是否可读，但不要把画面精美程度当作动作正确性。",
+      nativeFocus3: "在不人工补轨迹、不重新绑定人体的前提下，哪一侧更接近可直接进入三维场景或 Motion Pool 的数据。",
       beginPartOne: "开始第一部分",
       beginPartTwo: "开始第二部分",
+      beginPartThree: "开始第三部分",
       errorReviewer: "请填写一个匿名评审代号。",
       confirmRestart: "开始新评分会替换此浏览器中尚未导出的进度，确定继续吗？",
       errorQuality: "请选择哪一侧的综合动作表现更好。",
@@ -154,19 +188,23 @@
       errorInteractionNotEvaluable: "请选择交互保真度无法评价的素材原因。",
       errorDesync: "请选择哪一侧的动作—轨迹组合更自然。",
       errorDesyncFailure: "选择“两侧都不自然”时，请至少勾选一个失败原因。",
-      errorDesyncNotEvaluable: "请选择动作—轨迹组合无法评价的素材原因。"
+      errorDesyncNotEvaluable: "请选择动作—轨迹组合无法评价的素材原因。",
+      errorNativeInteraction: "请选择哪一侧更好地表达了可见交互。",
+      errorNativeOrientation: "请选择哪一侧的身体与头部朝向更清楚。",
+      errorNativeUtility: "请选择哪一侧更适合直接用于三维场景或 Motion Pool。"
     },
     en: {
-      pageTitle: "SocialMotion3D · E1c Blind Review",
-      brandSubtitle: "E1c blind review",
+      pageTitle: "SocialMotion3D · E1c/E1d Human Review",
+      brandSubtitle: "E1c/E1d human review",
       notSaved: "Not saved",
       autosaved: "Autosaved",
       exportReminder: "Please export a backup",
       exportCurrent: "Export current results",
-      heroTitle: "Does the motion occur naturally<br>along this trajectory?",
-      heroCopy: "Estimated time: 25–35 minutes. Results stay in this browser; export the CSV and return it to the study organizer when finished.",
+      heroTitle: "From controlled comparisons to<br>complete system-output assessment",
+      heroCopy: "Estimated time: 30–40 minutes. Results stay in this browser; export the CSV and return it to the study organizer when finished.",
       motionComparison: "motion-method comparisons",
       coherenceCheck: "motion–trajectory checks",
+      nativeOutputComparison: "native-output pilot clips",
       totalVideos: "videos in total",
       beforeStart: "Before you begin",
       introRule1: "Rate independently, do not discuss responses with other reviewers, and do not search for or open <code>blind_key.json</code>.",
@@ -180,6 +218,7 @@
       focusOn: "What to assess",
       partOne: "Part I",
       partTwo: "Part II",
+      partThree: "Part III · E1d Pilot",
       sampleCount: "Sample {current} / {total}",
       sharedTitle: "Motion comparison on a shared trajectory",
       sharedInstruction: "A and B use exactly the same root trajectory. Judge motion quality separately from the preservation of visible interactions in the reference.",
@@ -187,6 +226,9 @@
       desyncTitle: "Motion–trajectory coherence comparison",
       desyncInstruction: "Treat A and B as two anonymous motion–trajectory combinations and judge which one is more natural overall.",
       desyncLegend: "You may consider gait versus displacement, support-foot behavior, body progression, and start/stop coordination. You do not need to first report whether a difference is visible.",
+      nativeTitle: "Native end-to-end output comparison",
+      nativeInstruction: "This section preserves the complete representation actually delivered by each pipeline instead of converting both to the same skeleton. Assess system-level information and practical utility.",
+      nativeLegend: "Representation differences are part of the question, so the method family may be inferable from appearance. Do not judge visual polish alone; use the reference, trajectory, orientation, and downstream work required.",
       videoFallback: "This browser cannot play the video. Please use a recent version of Edge or Chrome.",
       videoLeft: "Left: reference video",
       videoAB: "Middle / right: anonymous results A / B",
@@ -197,10 +239,24 @@
       interactionHelp: "Assess visible gestures, looking, initiation, avoidance, and their timing. Larger motion is not automatically better.",
       desyncQuestion: "Which motion–trajectory combination is more natural overall?",
       desyncHelp: "Make one overall coherence judgment. If both are natural, both unnatural, or the material is insufficient, use the corresponding option.",
+      nativeInteractionQuestion: "1. Compared with the reference, which side expresses the visible interaction more clearly and faithfully?",
+      nativeInteractionHelp: "Consider action type, direction, and timing. Do not rate a surface as better merely because it has more visual volume than a skeleton.",
+      nativeOrientationQuestion: "2. Which side makes body and head orientation easier to interpret?",
+      nativeOrientationHelp: "Assess whether orientation is readable; do not infer an exact gaze target.",
+      nativeUtilityQuestion: "3. Without manually adding a trajectory or re-rigging a body, which side is more directly useful for a 3D interaction scene or Motion Pool?",
+      nativeUtilityHelp: "Consider motion, global displacement, body representation, and downstream work. This is a complete-system assessment, not a pure pose-accuracy comparison.",
       aBetter: "A is better",
       bBetter: "B is better",
       aMoreNatural: "A is more natural",
       bMoreNatural: "B is more natural",
+      aClearer: "A is clearer",
+      bClearer: "B is clearer",
+      similarClear: "Similar and both clear",
+      bothUnclear: "Both are unclear",
+      aMoreUseful: "A is more useful",
+      bMoreUseful: "B is more useful",
+      similarUseful: "Both are equally useful",
+      neitherUseful: "Neither is useful",
       similarAcceptable: "Similar and both acceptable",
       similarPreserved: "Similar and both preserve it",
       bothPoor: "Both are poor",
@@ -257,8 +313,14 @@
       desyncFocus1: "Whether gait rhythm matches body displacement.",
       desyncFocus2: "Whether support feet, body progression, starts, and stops are coordinated.",
       desyncFocus3: "Use “Similar and both acceptable” when appropriate, or “Cannot evaluate” when the material is insufficient.",
+      nativeSplashTitle: "Complete native outputs: system-level pilot",
+      nativeSplashCopy: "This short section contains five pilot clips. Each pipeline keeps its native delivered representation, so representational capacity is intentionally not equal. This section measures that end-to-end difference rather than repeating a pure motion comparison on a common skeleton.",
+      nativeFocus1: "Against the reference, whether the interaction type, direction, and timing remain clear.",
+      nativeFocus2: "Whether body and head orientation are readable, without treating visual polish as motion correctness.",
+      nativeFocus3: "Without manual trajectory annotation or body re-rigging, which output is closer to usable 3D-scene or Motion-Pool data.",
       beginPartOne: "Begin Part I",
       beginPartTwo: "Begin Part II",
+      beginPartThree: "Begin Part III",
       errorReviewer: "Enter an anonymous reviewer code.",
       confirmRestart: "Starting a new review will replace unsent progress stored in this browser. Continue?",
       errorQuality: "Choose which side has better overall motion.",
@@ -269,7 +331,10 @@
       errorInteractionNotEvaluable: "Select the material limitation that prevents judging interaction fidelity.",
       errorDesync: "Choose which motion–trajectory combination is more natural.",
       errorDesyncFailure: "When both are unnatural, select at least one failure reason.",
-      errorDesyncNotEvaluable: "Select the material limitation that prevents judging motion–trajectory coherence."
+      errorDesyncNotEvaluable: "Select the material limitation that prevents judging motion–trajectory coherence.",
+      errorNativeInteraction: "Choose which side better expresses the visible interaction.",
+      errorNativeOrientation: "Choose which side makes body and head orientation clearer.",
+      errorNativeUtility: "Choose which side is more directly useful for a 3D scene or Motion Pool."
     }
   };
 
@@ -278,7 +343,7 @@
     "start-review", "resume-review", "intro-error", "progress-wrap", "progress-text", "progress-bar",
     "autosave-state", "export-top", "section-intro-number", "section-intro-eyebrow", "section-intro-title",
     "section-intro-copy", "section-intro-focus", "begin-section", "section-chip", "sample-count", "task-title",
-    "task-instruction", "legend-card", "review-video", "rating-form", "shared-questions", "desync-questions",
+    "task-instruction", "legend-card", "review-video", "rating-form", "shared-questions", "desync-questions", "native-questions",
     "quality-failure-wrap", "quality-not-evaluable-wrap", "quality-not-evaluable-reason",
     "interaction-failure-wrap", "interaction-not-evaluable-wrap", "interaction-not-evaluable-reason",
     "desync-failure-wrap", "desync-not-evaluable-wrap", "desync-not-evaluable-reason", "notes", "form-error",
@@ -334,7 +399,7 @@
       completedAt: null,
       currentIndex: 0,
       languageAtStart: language,
-      sectionIntroductionsSeen: { shared: false, desync: false },
+      sectionIntroductionsSeen: { shared: false, desync: false, native: false },
       answers: {}
     };
   }
@@ -343,7 +408,8 @@
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!parsed || parsed.schemaVersion !== SCHEMA_VERSION) return null;
-      parsed.sectionIntroductionsSeen ||= { shared: false, desync: false };
+      parsed.sectionIntroductionsSeen ||= { shared: false, desync: false, native: false };
+      parsed.sectionIntroductionsSeen.native ||= false;
       return parsed;
     } catch (_) {
       return null;
@@ -412,6 +478,10 @@
       showSectionIntro("desync");
       return;
     }
+    if (state.currentIndex === 2 * CLIPS.length && !state.sectionIntroductionsSeen.native) {
+      showSectionIntro("native");
+      return;
+    }
     renderCurrent();
   }
 
@@ -423,16 +493,22 @@
   }
 
   function renderSectionIntroContent() {
-    const shared = currentSectionIntro === "shared";
-    elements["section-intro-number"].textContent = shared ? "01" : "02";
-    elements["section-intro-eyebrow"].textContent = shared ? "PART I" : "PART II";
-    elements["section-intro-title"].textContent = t(shared ? "sharedSplashTitle" : "desyncSplashTitle");
-    elements["section-intro-copy"].textContent = t(shared ? "sharedSplashCopy" : "desyncSplashCopy");
-    const focusKeys = shared
-      ? ["sharedFocus1", "sharedFocus2", "sharedFocus3"]
-      : ["desyncFocus1", "desyncFocus2", "desyncFocus3"];
+    const section = currentSectionIntro;
+    const sectionNumber = { shared: "01", desync: "02", native: "03" }[section];
+    const partName = { shared: "PART I", desync: "PART II", native: "PART III · E1d PILOT" }[section];
+    const titleKey = { shared: "sharedSplashTitle", desync: "desyncSplashTitle", native: "nativeSplashTitle" }[section];
+    const copyKey = { shared: "sharedSplashCopy", desync: "desyncSplashCopy", native: "nativeSplashCopy" }[section];
+    const focusKeys = {
+      shared: ["sharedFocus1", "sharedFocus2", "sharedFocus3"],
+      desync: ["desyncFocus1", "desyncFocus2", "desyncFocus3"],
+      native: ["nativeFocus1", "nativeFocus2", "nativeFocus3"]
+    }[section];
+    elements["section-intro-number"].textContent = sectionNumber;
+    elements["section-intro-eyebrow"].textContent = partName;
+    elements["section-intro-title"].textContent = t(titleKey);
+    elements["section-intro-copy"].textContent = t(copyKey);
     elements["section-intro-focus"].innerHTML = focusKeys.map((key) => `<li>${t(key)}</li>`).join("");
-    elements["begin-section"].textContent = t(shared ? "beginPartOne" : "beginPartTwo");
+    elements["begin-section"].textContent = t({ shared: "beginPartOne", desync: "beginPartTwo", native: "beginPartThree" }[section]);
   }
 
   function selected(name) {
@@ -484,12 +560,17 @@
   function renderReviewText() {
     if (!state || state.currentIndex >= ITEMS.length) return;
     const item = ITEMS[state.currentIndex];
-    const shared = item.type === "shared";
-    elements["section-chip"].textContent = t(shared ? "partOne" : "partTwo");
-    elements["sample-count"].textContent = t("sampleCount", { current: item.sectionIndex + 1, total: CLIPS.length });
-    elements["task-title"].textContent = t(shared ? "sharedTitle" : "desyncTitle");
-    elements["task-instruction"].textContent = t(shared ? "sharedInstruction" : "desyncInstruction");
-    elements["legend-card"].innerHTML = t(shared ? "sharedLegend" : "desyncLegend");
+    const textKeys = {
+      shared: ["partOne", "sharedTitle", "sharedInstruction", "sharedLegend"],
+      desync: ["partTwo", "desyncTitle", "desyncInstruction", "desyncLegend"],
+      native: ["partThree", "nativeTitle", "nativeInstruction", "nativeLegend"]
+    }[item.type];
+    const sectionTotal = item.type === "native" ? NATIVE_CLIPS.length : CLIPS.length;
+    elements["section-chip"].textContent = t(textKeys[0]);
+    elements["sample-count"].textContent = t("sampleCount", { current: item.sectionIndex + 1, total: sectionTotal });
+    elements["task-title"].textContent = t(textKeys[1]);
+    elements["task-instruction"].textContent = t(textKeys[2]);
+    elements["legend-card"].innerHTML = t(textKeys[3]);
     elements["save-next"].textContent = t(state.currentIndex === ITEMS.length - 1 ? "saveFinish" : "saveNext");
   }
 
@@ -504,6 +585,7 @@
     resetForm();
     elements["shared-questions"].hidden = item.type !== "shared";
     elements["desync-questions"].hidden = item.type !== "desync";
+    elements["native-questions"].hidden = item.type !== "native";
     elements["review-video"].src = videoPath(item);
     elements["review-video"].load();
     elements["previous-item"].disabled = state.currentIndex === 0;
@@ -522,10 +604,14 @@
       setSelected("interaction_fidelity", answer.interactionFidelity || "");
       setCheckedValues("interaction_failure_reason", answer.interactionFailureReasons);
       elements["interaction-not-evaluable-reason"].value = answer.interactionNotEvaluableReason || "";
-    } else {
+    } else if (item.type === "desync") {
       setSelected("desync_natural", answer.desyncNatural || "");
       setCheckedValues("desync_failure_reason", answer.desyncFailureReasons);
       elements["desync-not-evaluable-reason"].value = answer.desyncNotEvaluableReason || "";
+    } else {
+      setSelected("native_interaction", answer.nativeInteraction || "");
+      setSelected("native_orientation", answer.nativeOrientation || "");
+      setSelected("native_utility", answer.nativeUtility || "");
     }
     elements.notes.value = answer.notes || "";
     updateConditionals();
@@ -543,10 +629,16 @@
       if (interaction === "not_evaluable" && !elements["interaction-not-evaluable-reason"].value) return t("errorInteractionNotEvaluable");
       return "";
     }
-    const desync = selected("desync_natural");
-    if (!desync) return t("errorDesync");
-    if (desync === "both_poor" && !checkedValues("desync_failure_reason").length) return t("errorDesyncFailure");
-    if (desync === "not_evaluable" && !elements["desync-not-evaluable-reason"].value) return t("errorDesyncNotEvaluable");
+    if (item.type === "desync") {
+      const desync = selected("desync_natural");
+      if (!desync) return t("errorDesync");
+      if (desync === "both_poor" && !checkedValues("desync_failure_reason").length) return t("errorDesyncFailure");
+      if (desync === "not_evaluable" && !elements["desync-not-evaluable-reason"].value) return t("errorDesyncNotEvaluable");
+      return "";
+    }
+    if (!selected("native_interaction")) return t("errorNativeInteraction");
+    if (!selected("native_orientation")) return t("errorNativeOrientation");
+    if (!selected("native_utility")) return t("errorNativeUtility");
     return "";
   }
 
@@ -573,12 +665,20 @@
         interactionNotEvaluableReason: interaction === "not_evaluable" ? elements["interaction-not-evaluable-reason"].value : ""
       };
     }
-    const desync = selected("desync_natural");
+    if (item.type === "desync") {
+      const desync = selected("desync_natural");
+      return {
+        ...base,
+        desyncNatural: desync,
+        desyncFailureReasons: desync === "both_poor" ? checkedValues("desync_failure_reason") : [],
+        desyncNotEvaluableReason: desync === "not_evaluable" ? elements["desync-not-evaluable-reason"].value : ""
+      };
+    }
     return {
       ...base,
-      desyncNatural: desync,
-      desyncFailureReasons: desync === "both_poor" ? checkedValues("desync_failure_reason") : [],
-      desyncNotEvaluableReason: desync === "not_evaluable" ? elements["desync-not-evaluable-reason"].value : ""
+      nativeInteraction: selected("native_interaction"),
+      nativeOrientation: selected("native_orientation"),
+      nativeUtility: selected("native_utility")
     };
   }
 
@@ -589,7 +689,11 @@
         schema_version: SCHEMA_VERSION,
         reviewer_id: state.reviewerId,
         session_id: state.sessionId,
-        task_type: item.type === "shared" ? "gem_vs_motionbert_shared_trajectory" : "motion_trajectory_coherence",
+        task_type: {
+          shared: "gem_vs_motionbert_shared_trajectory",
+          desync: "motion_trajectory_coherence",
+          native: "native_end_to_end_output"
+        }[item.type],
         sample_number: item.sectionIndex + 1,
         video_file: item.file,
         overall_motion_choice: answer.qualityOverall || "",
@@ -601,6 +705,9 @@
         motion_trajectory_naturalness_choice: answer.desyncNatural || "",
         motion_trajectory_failure_reasons: (answer.desyncFailureReasons || []).join("|"),
         motion_trajectory_not_evaluable_reason: answer.desyncNotEvaluableReason || "",
+        native_interaction_fidelity_choice: answer.nativeInteraction || "",
+        native_orientation_readability_choice: answer.nativeOrientation || "",
+        native_scene_utility_choice: answer.nativeUtility || "",
         interface_language: answer.interfaceLanguage || "",
         notes: answer.notes || "",
         rated_at: answer.ratedAt
@@ -623,7 +730,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `SocialMotion3D_E1c_${safeReviewer()}_${complete}.${suffix}`;
+    link.download = `SocialMotion3D_E1_review_${safeReviewer()}_${complete}.${suffix}`;
     document.body.appendChild(link);
     link.click();
     link.remove();

@@ -1,5 +1,5 @@
-SocialMotion3D E1c 人工盲评 / Blind Review v3
-=============================================
+SocialMotion3D E1c/E1d 人工评审 / Human Review v4
+=================================================
 
 使用方法
 1. 请先完整解压 ZIP，不要直接在压缩包预览窗口中运行。
@@ -7,7 +7,7 @@ SocialMotion3D E1c 人工盲评 / Blind Review v3
 3. 填写匿名评审代号并开始。评分会自动保存在当前浏览器中。
 4. 右上角可切换 EN | 中；切换语言不会清空评分。
 5. 完成后下载 CSV，并将 CSV 发回实验组织者；JSON 可作为完整备份。
-6. v3 使用新的评分存储空间，不会继承旧视角版本中的答案。
+6. v4 使用新的评分存储空间，不会继承旧版本中的答案。
 
 注意
 - 请勿查找或索取 blind_key.json；本评分包没有包含该文件。
@@ -19,6 +19,8 @@ SocialMotion3D E1c 人工盲评 / Blind Review v3
 - 第一部分分开评价“整体动作质量”和“可见交互保真度”，不要把两者混为同一个问题。
 - 黄色胸前标记只表示躯干正面；球形头部没有朝向信息，不评价 head yaw、LOS 或 FTT 的精细头部方向。
 - 第二部分只需评价动作—轨迹组合的整体自然性，不需要猜测实验处理或说明判断依据。
+- 第三部分是 E1d 的5段原生输出 pilot。两套流程不再统一为同一种人体表示，用于评价端到端信息完整性和直接使用价值。
+- 第三部分的外观差异可能让方法类别可以被推测，因此它不是严格的双盲纯姿态比较。请不要只按网格与骨架的美观程度评分。
 - “两侧都差”表示方法输出都存在问题；“无法评价”表示素材本身不足以支持判断。
 
 English quick guide
@@ -27,4 +29,6 @@ English quick guide
 3. Use EN | 中 in the top-right corner to switch languages without losing responses.
 4. Part I separately rates overall motion quality and fidelity to the visible interaction.
 5. Part II asks only which anonymous motion–trajectory combination is more natural overall.
-6. Export the CSV when complete; keep the JSON as a full backup if possible.
+6. Part III is a five-clip E1d pilot that preserves each pipeline's native delivered representation and rates end-to-end information and direct utility.
+7. Part III is not a strictly double-blind pure-pose comparison: representation may reveal the method family, so do not rate visual polish alone.
+8. Export the CSV when complete; keep the JSON as a full backup if possible.

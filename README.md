@@ -11,6 +11,8 @@ export PYTHONPATH="$PWD/src"
 python -m unittest discover -s tests -v
 python scripts/run_e1.py --config configs/private_e1_batch23.json --render-blind
 python scripts/run_e1c.py --config configs/private_e1c_batch23.json --render-blind
+# E1d 使用命令行参数指定本地 MotionBERT、GEM SMPL-X 与人体模型目录：
+python scripts/run_e1d_review.py --help
 python scripts/run_e3.py --config configs/private_e3_pilot.json
 python scripts/run_e2a.py --config configs/private_e2a_pilot.json
 ```

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>SocialMotion3D · E1c 人工盲评</title>
-  <meta name="description" content="GEM、MotionBERT 与动作—轨迹协调性的离线人工盲评工具。">
+  <title>SocialMotion3D · E1c/E1d 人工评审</title>
+  <meta name="description" content="受控动作—轨迹比较与原生端到端输出的离线人工评审工具。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
       <span class="brand-mark" aria-hidden="true">SM</span>
       <div>
         <strong>SocialMotion3D</strong>
-        <span data-i18n="brandSubtitle">E1c 人工盲评</span>
+        <span data-i18n="brandSubtitle">E1c/E1d 人工评审</span>
       </div>
     </div>
     <div class="progress-wrap" id="progress-wrap" hidden>
@@ -36,12 +36,13 @@
     <section class="intro-layout" id="intro-screen">
       <div class="hero-card">
         <span class="eyebrow">OFFLINE BLIND REVIEW</span>
-        <h1 data-i18n-html="heroTitle">判断动作是否自然地<br>发生在这条轨迹上</h1>
-        <p class="hero-copy" data-i18n="heroCopy">全程约 25–35 分钟。结果只保存在当前浏览器；完成后请导出 CSV，并发回实验组织者。</p>
+        <h1 data-i18n-html="heroTitle">从受控动作比较到<br>完整系统输出评估</h1>
+        <p class="hero-copy" data-i18n="heroCopy">全程约 30–40 分钟。结果只保存在当前浏览器；完成后请导出 CSV，并发回实验组织者。</p>
         <div class="metric-row" aria-label="任务数量">
           <div><strong>28</strong><span data-i18n="motionComparison">动作方法比较</span></div>
           <div><strong>28</strong><span data-i18n="coherenceCheck">动作—轨迹协调检查</span></div>
-          <div><strong>56</strong><span data-i18n="totalVideos">总视频数</span></div>
+          <div><strong>5</strong><span data-i18n="nativeOutputComparison">原生输出试评</span></div>
+          <div><strong>61</strong><span data-i18n="totalVideos">总视频数</span></div>
         </div>
       </div>
 
@@ -196,6 +197,45 @@
                 <option value="target_too_small" data-i18n="reasonTooSmall">目标太小</option>
                 <option value="other" data-i18n="reasonOtherMaterial">其他素材原因</option>
               </select>
+            </div>
+          </fieldset>
+        </div>
+
+        <div id="native-questions" hidden>
+          <fieldset class="question-block primary-question">
+            <legend data-i18n="nativeInteractionQuestion">1. 与左侧参考相比，哪一侧更清楚、忠实地表达了可见的交互动作？</legend>
+            <p class="question-help" data-i18n="nativeInteractionHelp">关注动作类型、方向与时机；不要仅因网格比骨架更有体积感就判定其动作更好。</p>
+            <div class="choice-row six">
+              <label class="choice"><input type="radio" name="native_interaction" value="a"><span data-i18n="aBetter">A 更好</span></label>
+              <label class="choice"><input type="radio" name="native_interaction" value="b"><span data-i18n="bBetter">B 更好</span></label>
+              <label class="choice"><input type="radio" name="native_interaction" value="similar"><span data-i18n="similarPreserved">一致且都保留</span></label>
+              <label class="choice"><input type="radio" name="native_interaction" value="both_fail"><span data-i18n="bothFailPreserve">两侧都未保留</span></label>
+              <label class="choice"><input type="radio" name="native_interaction" value="no_clear_reference"><span data-i18n="noClearInteraction">参考中无明确交互</span></label>
+              <label class="choice"><input type="radio" name="native_interaction" value="not_evaluable"><span data-i18n="notEvaluable">无法评价</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="question-block">
+            <legend data-i18n="nativeOrientationQuestion">2. 哪一侧更容易判断身体与头部的朝向？</legend>
+            <p class="question-help" data-i18n="nativeOrientationHelp">评价朝向信息是否可读，不要求推断精确视线落点。</p>
+            <div class="choice-row five">
+              <label class="choice"><input type="radio" name="native_orientation" value="a"><span data-i18n="aClearer">A 更清楚</span></label>
+              <label class="choice"><input type="radio" name="native_orientation" value="b"><span data-i18n="bClearer">B 更清楚</span></label>
+              <label class="choice"><input type="radio" name="native_orientation" value="similar"><span data-i18n="similarClear">一致且都清楚</span></label>
+              <label class="choice"><input type="radio" name="native_orientation" value="both_poor"><span data-i18n="bothUnclear">两侧都不清楚</span></label>
+              <label class="choice"><input type="radio" name="native_orientation" value="not_evaluable"><span data-i18n="notEvaluable">无法评价</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="question-block">
+            <legend data-i18n="nativeUtilityQuestion">3. 若不额外人工补轨迹或重新绑定人体，哪一侧更适合直接用于三维交互场景或 Motion Pool？</legend>
+            <p class="question-help" data-i18n="nativeUtilityHelp">综合动作、全局位移、人体表示和后续加工需求；这是完整系统输出评价，不是纯姿态精度比较。</p>
+            <div class="choice-row five">
+              <label class="choice"><input type="radio" name="native_utility" value="a"><span data-i18n="aMoreUseful">A 更适用</span></label>
+              <label class="choice"><input type="radio" name="native_utility" value="b"><span data-i18n="bMoreUseful">B 更适用</span></label>
+              <label class="choice"><input type="radio" name="native_utility" value="similar"><span data-i18n="similarUseful">两侧同样适用</span></label>
+              <label class="choice"><input type="radio" name="native_utility" value="neither"><span data-i18n="neitherUseful">两侧都不适用</span></label>
+              <label class="choice"><input type="radio" name="native_utility" value="not_evaluable"><span data-i18n="notEvaluable">无法评价</span></label>
             </div>
           </fieldset>
         </div>
