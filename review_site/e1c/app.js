@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  const SCHEMA_VERSION = "e1c-human-review-2.0";
-  const STORAGE_KEY = "socialmotion3d-e1c-human-review-v2";
+  const SCHEMA_VERSION = "e1c-human-review-3.0";
+  const STORAGE_KEY = "socialmotion3d-e1c-human-review-v3";
   const LANGUAGE_KEY = "socialmotion3d-e1c-language";
   const CLIPS = [
     "01_gp_set_0003_vid_0004_gp_3467_Other_blind.mp4",
