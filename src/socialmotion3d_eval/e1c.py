@@ -25,6 +25,70 @@ class DesynchronizedMotion:
     offset_frames: int
 
 
+@dataclass(frozen=True)
+class RecoveredCamera:
+    """Rigid camera-to-world transforms recovered from paired joint sets.
+
+    ``rotation_row`` follows NumPy's row-vector convention:
+    ``points_world = points_camera @ rotation_row + camera_center``.
+    """
+
+    camera_center: np.ndarray
+    rotation_row: np.ndarray
+    fit_rmse: np.ndarray
+    valid: np.ndarray
+
+
+def recover_camera_from_joint_pairs(
+    joints_incam: np.ndarray,
+    joints_global: np.ndarray,
+    valid: np.ndarray,
+) -> RecoveredCamera:
+    """Recover per-frame camera pose from matching in-camera/global joints.
+
+    GEM stores the same articulated body in both coordinate systems. A proper
+    rigid transform between those paired joints therefore recovers the source
+    camera location and orientation without rerunning the camera backend.
+    Reflections are explicitly rejected.
+    """
+    joints_incam = np.asarray(joints_incam, dtype=np.float64)
+    joints_global = np.asarray(joints_global, dtype=np.float64)
+    valid = np.asarray(valid, dtype=bool)
+    if joints_incam.shape != joints_global.shape or joints_incam.ndim != 3 or joints_incam.shape[-1] != 3:
+        raise ValueError("paired joint arrays must have matching [T,J,3] shapes")
+    if len(valid) != len(joints_incam):
+        raise ValueError("valid mask must match the number of frames")
+
+    frame_count = len(joints_incam)
+    centers = np.full((frame_count, 3), np.nan, dtype=np.float64)
+    rotations = np.full((frame_count, 3, 3), np.nan, dtype=np.float64)
+    fit_rmse = np.full(frame_count, np.nan, dtype=np.float64)
+    recovered = valid & np.isfinite(joints_incam).all(axis=(1, 2)) & np.isfinite(joints_global).all(axis=(1, 2))
+
+    for frame_index in np.flatnonzero(recovered):
+        source = joints_incam[frame_index]
+        target = joints_global[frame_index]
+        source_mean = source.mean(axis=0)
+        target_mean = target.mean(axis=0)
+        source_centered = source - source_mean
+        target_centered = target - target_mean
+        if float(np.linalg.norm(source_centered)) < 1e-10 or float(np.linalg.norm(target_centered)) < 1e-10:
+            recovered[frame_index] = False
+            continue
+        u, _, vt = np.linalg.svd(source_centered.T @ target_centered)
+        rotation = u @ vt
+        if np.linalg.det(rotation) < 0:
+            u[:, -1] *= -1
+            rotation = u @ vt
+        center = target_mean - source_mean @ rotation
+        predicted = source @ rotation + center
+        centers[frame_index] = center
+        rotations[frame_index] = rotation
+        fit_rmse[frame_index] = float(np.sqrt(np.mean(np.sum((predicted - target) ** 2, axis=-1))))
+
+    return RecoveredCamera(centers, rotations, fit_rmse, recovered)
+
+
 def construct_shared_root_variants(
     motionbert: np.ndarray,
     gem_global: np.ndarray,

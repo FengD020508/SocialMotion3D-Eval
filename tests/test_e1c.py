@@ -7,6 +7,7 @@ from socialmotion3d_eval.e1c import (
     construct_shared_root_variants,
     coupling_metrics,
     desynchronize_articulation,
+    recover_camera_from_joint_pairs,
 )
 
 
@@ -36,6 +37,26 @@ def synthetic_skeleton(frames: int = 40) -> np.ndarray:
 
 
 class E1CConstructionTests(unittest.TestCase):
+    def test_recovers_proper_camera_transform_from_paired_joints(self):
+        incam = synthetic_skeleton(12)
+        angle = np.deg2rad(63.0)
+        rotation = np.asarray(
+            [
+                [np.cos(angle), 0.0, -np.sin(angle)],
+                [0.0, 1.0, 0.0],
+                [np.sin(angle), 0.0, np.cos(angle)],
+            ]
+        )
+        centers = np.column_stack(
+            [np.linspace(1.0, 1.4, len(incam)), np.full(len(incam), 1.5), np.linspace(-2.0, -1.6, len(incam))]
+        )
+        global_joints = incam @ rotation + centers[:, None, :]
+        recovered = recover_camera_from_joint_pairs(incam, global_joints, np.ones(len(incam), dtype=bool))
+        np.testing.assert_allclose(recovered.camera_center, centers, atol=1e-10)
+        np.testing.assert_allclose(recovered.rotation_row, np.repeat(rotation[None], len(incam), axis=0), atol=1e-10)
+        self.assertTrue((np.linalg.det(recovered.rotation_row) > 0.999999).all())
+        self.assertLess(float(np.nanmax(recovered.fit_rmse)), 1e-10)
+
     def test_shared_root_preserves_exact_gem_trajectory(self):
         gem = synthetic_skeleton()
         gem[:, :, 0] += np.linspace(0.0, 2.0, len(gem))[:, None]

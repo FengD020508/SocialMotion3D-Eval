@@ -20,6 +20,7 @@ from socialmotion3d_eval.e1c import (
     coupling_metrics,
     desynchronize_articulation,
     infer_ankle_contacts,
+    recover_camera_from_joint_pairs,
 )
 
 
@@ -233,14 +234,16 @@ def _fixed_world_camera(
     valid_data: np.ndarray,
     body_height: float,
     ground: float,
-) -> dict[str, float | tuple[float, float, float]]:
-    """Choose one world-fixed camera that contains the complete valid trajectory."""
+    source_camera_centers: np.ndarray | None = None,
+) -> dict[str, float | str | tuple[float, float, float]]:
+    """Choose one world-fixed camera, viewed from the source-camera side."""
     horizontal = np.asarray(root_path[valid][:, [0, 2]], dtype=np.float64)
     horizontal = horizontal[np.isfinite(horizontal).all(axis=1)]
     if not len(horizontal):
         horizontal = np.zeros((1, 2), dtype=np.float64)
 
     centered = horizontal - np.mean(horizontal, axis=0, keepdims=True)
+    view_policy = "trajectory_side_fallback"
     if len(horizontal) >= 2 and float(np.linalg.norm(centered)) > 1e-8:
         _, _, principal_axes = np.linalg.svd(centered, full_matrices=False)
         direction = principal_axes[0]
@@ -251,6 +254,27 @@ def _fixed_world_camera(
         azimuth = path_azimuth + 90.0
     else:
         azimuth = -65.0
+
+    if source_camera_centers is not None:
+        source_camera_centers = np.asarray(source_camera_centers, dtype=np.float64)
+        if source_camera_centers.shape == root_path.shape:
+            camera_valid = (
+                np.asarray(valid, dtype=bool)
+                & np.isfinite(source_camera_centers).all(axis=1)
+                & np.isfinite(root_path).all(axis=1)
+            )
+            observer = source_camera_centers[camera_valid][:, [0, 2]] - root_path[camera_valid][:, [0, 2]]
+            observer_norm = np.linalg.norm(observer, axis=1)
+            observer = observer[observer_norm > 1e-8]
+            observer_norm = observer_norm[observer_norm > 1e-8]
+            if len(observer):
+                unit_observer = observer / observer_norm[:, None]
+                representative = np.median(unit_observer, axis=0)
+                if float(np.linalg.norm(representative)) < 0.25:
+                    representative = unit_observer[len(unit_observer) // 2]
+                representative /= np.linalg.norm(representative)
+                azimuth = float(np.degrees(np.arctan2(representative[1], representative[0])))
+                view_policy = "source_camera_side"
 
     padding = 0.62 * body_height
     x_min = float(np.min(horizontal[:, 0]) - padding)
@@ -278,6 +302,8 @@ def _fixed_world_camera(
         "y_min": y_min,
         "y_max": y_max,
         "azimuth": azimuth,
+        "elevation": 19.0,
+        "view_policy": view_policy,
         "box_aspect": spans,
         "floor_radius": 0.5 * max(spans[0], spans[1]),
         "floor_x": 0.5 * (x_min + x_max),
@@ -287,16 +313,15 @@ def _fixed_world_camera(
 
 def _body_forward(joints: np.ndarray, path_direction: np.ndarray) -> np.ndarray:
     hip_axis = joints[4] - joints[1]
-    hip_axis[1] = 0.0
-    forward = np.asarray([-hip_axis[2], 0.0, hip_axis[0]])
+    shoulder_axis = joints[11] - joints[14]
+    lateral_axis = 0.45 * hip_axis + 0.55 * shoulder_axis
+    lateral_axis[1] = 0.0
+    forward = np.asarray([-lateral_axis[2], 0.0, lateral_axis[0]])
     if np.linalg.norm(forward) < 1e-8:
         forward = np.asarray(path_direction, dtype=np.float64)
     if np.linalg.norm(forward) < 1e-8:
         forward = np.asarray([0.0, 0.0, 1.0])
     forward /= np.linalg.norm(forward)
-    path_direction = np.asarray(path_direction, dtype=np.float64)
-    if np.linalg.norm(path_direction) > 1e-8 and np.dot(forward, path_direction) < 0:
-        forward *= -1.0
     return forward
 
 
@@ -332,6 +357,13 @@ def _render_mannequin(
         all_colors.extend([color] * len(faces))
 
     forward = _body_forward(joints, path_direction)
+    chest_center = joints[8] + forward * (0.108 * body_height)
+    chest_faces = _box_faces(
+        chest_center, forward, half_length=0.014 * body_height,
+        half_width=0.060 * body_height, half_height=0.070 * body_height,
+    )
+    all_faces.extend(chest_faces)
+    all_colors.extend(["#facc15"] * len(chest_faces))
     for ankle, color in ((3, "#fb923c"), (6, "#38bdf8")):
         center = joints[ankle] + forward * (0.055 * body_height)
         center[1] = max(center[1], ground + 0.028 * body_height)
@@ -385,6 +417,7 @@ def render_blind_pair_video(
     valid: np.ndarray,
     fps: float,
     stride: int,
+    source_camera_centers: np.ndarray | None = None,
 ) -> None:
     data_a = condition_data[method_a]
     data_b = condition_data[method_b]
@@ -396,7 +429,10 @@ def render_blind_pair_video(
     vertical_extent = np.ptp(valid_data[..., 1], axis=1) if len(valid_data) else np.asarray([1.0])
     body_height = max(float(np.median(vertical_extent)), 0.5)
     ground = float(np.percentile(valid_data[:, [3, 6], 1], 5)) if len(valid_data) else 0.0
-    camera = _fixed_world_camera(root_path, valid, valid_data, body_height, ground)
+    camera = _fixed_world_camera(
+        root_path, valid, valid_data, body_height, ground,
+        source_camera_centers=source_camera_centers,
+    )
     frame_indices = np.flatnonzero(valid)[::max(int(stride), 1)]
     if not len(frame_indices):
         raise ValueError(f"{scene}: no valid frames to render")
@@ -421,7 +457,7 @@ def render_blind_pair_video(
         axis.set_facecolor("#1f2937")
         axis.set_proj_type("ortho")
         axis.set_box_aspect(camera["box_aspect"])
-        axis.view_init(elev=19, azim=camera["azimuth"])
+        axis.view_init(elev=camera["elevation"], azim=camera["azimuth"])
         axis.set_axis_off()
 
     path_axis.set_facecolor("#1f2937")
@@ -470,7 +506,7 @@ def render_blind_pair_video(
                     axis.set_facecolor("#1f2937")
                     axis.set_proj_type("ortho")
                     axis.set_box_aspect(camera["box_aspect"])
-                    axis.view_init(elev=19, azim=camera["azimuth"])
+                    axis.view_init(elev=camera["elevation"], azim=camera["azimuth"])
                     axis.set_axis_off()
                     axis.set_xlim(camera["x_min"], camera["x_max"])
                     axis.set_ylim(camera["z_min"], camera["z_max"])
@@ -580,6 +616,7 @@ def main() -> None:
             motionbert_frames = np.asarray(meta["local_frames"], dtype=np.int64)
             fps = float(meta["fps"])
         with np.load(gem_path, allow_pickle=False) as gem_data:
+            gem_incam = np.asarray(gem_data["joints_incam"], dtype=np.float64)
             gem_global = np.asarray(gem_data["joints_global"], dtype=np.float64)
             gem_frames = np.asarray(gem_data["local_frames"], dtype=np.int64)
             gem_valid = np.asarray(gem_data["valid_mask"], dtype=bool)
@@ -596,6 +633,15 @@ def main() -> None:
         motionbert_shared = variants.motionbert_shared_root[primary.trajectory_indices]
         desynchronized = primary.desynchronized
         common_valid = primary.valid & variants.valid[primary.trajectory_indices]
+
+        gem_frame_index = {int(frame): index for index, frame in enumerate(gem_frames)}
+        incam_aligned = gem_incam[
+            [gem_frame_index[int(frame)] for frame in aligned.local_frames]
+        ]
+        incam_retained = incam_aligned[primary.trajectory_indices]
+        recovered_camera = recover_camera_from_joint_pairs(
+            incam_retained, native, common_valid
+        )
 
         mb_index = {int(frame): index for index, frame in enumerate(motionbert_frames)}
         reference_indices = np.asarray(
@@ -702,6 +748,7 @@ def main() -> None:
                     shared_video, scene, reference_video, reference_indices,
                     current_conditions, shared_a, shared_b, common_valid,
                     fps or fps_default, render_stride,
+                    source_camera_centers=recovered_camera.camera_center,
                 )
             if args.overwrite_videos or not desync_video.is_file():
                 print(f"rendering desynchronization blind pair: {scene}")
@@ -709,6 +756,7 @@ def main() -> None:
                     desync_video, scene, reference_video, reference_indices,
                     current_conditions, desync_a, desync_b, common_valid,
                     fps or fps_default, render_stride,
+                    source_camera_centers=recovered_camera.camera_center,
                 )
 
         scene_reports.append(
@@ -720,6 +768,11 @@ def main() -> None:
                 "common_valid_frames": int(common_valid.sum()),
                 "primary_shift_frames": signed_shift,
                 "gem_body_scale": variants.gem_body_scale,
+                "source_camera_recovered_frames": int(recovered_camera.valid.sum()),
+                "source_camera_fit_rmse_median": (
+                    float(np.nanmedian(recovered_camera.fit_rmse[recovered_camera.valid]))
+                    if recovered_camera.valid.any() else None
+                ),
             }
         )
         print(f"E1c prepared {scene}: {int(common_valid.sum())}/{len(common_valid)} valid")
@@ -742,6 +795,11 @@ def main() -> None:
         "clip_count": len(scene_reports),
         "primary_shift_frames": primary_shift,
         "primary_shift_policy": "deterministic blinded sign per clip; no wrap or padding",
+        "render_view_policy": (
+            "World-fixed orthographic camera placed on the recovered source-camera side; "
+            "trajectory-side view is used only as a fallback. Anatomical front is not forced "
+            "to agree with the path direction."
+        ),
         "comparison_boundary": (
             "MotionBERT_shared_root is an assembly control using GEM root trajectory, not a native "
             "MotionBERT trajectory. Coupling metrics use inferred common-17 ankle contacts and are "
